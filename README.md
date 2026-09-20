@@ -16,7 +16,7 @@ npm run build
 npm start
 ```
 
-The process starts one `codex-acp` subprocess and one persistent ACP session rooted at `workspace/`. Set `OPENAI_API_KEY`, or log in with the Codex CLI in the same OS account before starting the service. The Codex account must also be able to write its own `~/.codex` state directory. The server uses `gpt-5.6-terra` by default; override it with `CODEX_MODEL` in `.env`. `CODEX_VERBOSE=true` (the default) streams turn timing, tool status, plans, and response chunks to server stdout; set it to `false` for quiet operation.
+The process starts one `codex-acp` subprocess and one persistent ACP session rooted at `workspace/`. Set `OPENAI_API_KEY`, or log in with the Codex CLI in the same OS account before starting the service. The Codex account must also be able to write its own `~/.codex` state directory. The server uses `gpt-5.6-terra` by default; override it with `CODEX_MODEL` in `.env`. Each turn receives a fresh workspace snapshot after acquiring the session lock, avoiding the usual discovery/read round trip and stale snapshots for queued turns. `CODEX_VERBOSE=true` (the default) streams turn timing, tool status, plans, and coalesced response text to server stdout; set it to `false` for quiet operation.
 
 ```sh
 curl http://127.0.0.1:3000/health

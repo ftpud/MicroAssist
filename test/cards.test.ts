@@ -63,3 +63,14 @@ test("legacy model-written reminders are listed and deleted with their card", as
   assert.equal((await readReminderHistory(workspace)).length, 0);
   assert.equal(parseCards(await readFile(join(workspace, "CARDS.md"), "utf8")).length, 0);
 });
+
+test("an immediate notification command creates a due reminder without waiting for Codex", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "micro-assist-immediate-notification-"));
+  await writeFile(join(workspace, "ACTUAL.md"), "# Актуальное\n", "utf8");
+  const now = new Date("2026-09-20T18:04:41.975Z");
+  const created = await createRelativeReminder(workspace, "Отправь нотификацию я лох", now);
+  assert.equal(created?.title, "Уведомление");
+  assert.equal(created?.bodyMarkdown, "я лох");
+  assert.equal(created?.notificationAt, now.toISOString());
+  assert.equal((await readReminderHistory(workspace))[0]?.id, created?.id);
+});

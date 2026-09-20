@@ -149,19 +149,22 @@ export async function dismissCard(workspace: string, cardId: string, now = new D
  * schedule a local notification without waiting for a model turn. */
 export async function createRelativeReminder(workspace: string, text: string, now: Date): Promise<Card | undefined> {
   const match = text.match(/(?:через|in)\s+(\d{1,5})\s*(минут(?:у|ы)?|мин|minutes?|mins?|час(?:а|ов)?|hours?|hrs?)/iu);
-  if (!match) return undefined;
-  const amount = Number(match[1]);
-  const hours = /час|hour|hr/iu.test(match[2]!);
-  const delay = amount * (hours ? 60 * 60_000 : 60_000);
-  if (!Number.isSafeInteger(delay) || delay < 60_000 || delay > 365 * 24 * 60 * 60_000) return undefined;
+  const immediate = text.match(/(?:отправь|пришли|покажи|сделай)\s+(?:мне\s+)?(?:нотификаци[а-яё]*|уведомлени[а-яё]*)\s*(?::|с\s+текстом|что)?\s*(.*)$/iu)
+    ?? text.match(/напомни\s+(?:мне\s+)?(?:сейчас|прямо\s+сейчас)\s*(.*)$/iu);
+  if (!match && !immediate) return undefined;
+  const amount = match ? Number(match[1]) : 0;
+  const hours = match ? /час|hour|hr/iu.test(match[2]!) : false;
+  const delay = match ? amount * (hours ? 60 * 60_000 : 60_000) : 0;
+  if (!Number.isSafeInteger(delay) || (match && delay < 60_000) || delay > 365 * 24 * 60 * 60_000) return undefined;
 
   const notificationAt = new Date(now.getTime() + delay);
+  const reminderText = immediate?.[1]?.trim() || text.trim();
   const digest = createHash("sha256").update(`${text.trim()}\n${notificationAt.toISOString()}`).digest("hex").slice(0, 20);
   const card: Card = {
     id: `reminder-${digest}`,
     kind: "reminder",
-    title: "Напоминание",
-    bodyMarkdown: text.trim(),
+    title: immediate ? "Уведомление" : "Напоминание",
+    bodyMarkdown: reminderText,
     priority: 100,
     createdAt: now.toISOString(),
     visibleFrom: now.toISOString(),
@@ -179,7 +182,7 @@ export async function createRelativeReminder(workspace: string, text: string, no
   const reminderPath = join(workspace, "REMINDERS.md");
   const reminderState = await optionalFile(reminderPath, "# Reminders\n\n");
   if (!reminderState.includes(`- ${card.id} |`)) {
-    await appendFile(reminderPath, `- ${card.id} | scheduled | ${card.notificationAt} | ${JSON.stringify(text.trim())}\n`, "utf8");
+    await appendFile(reminderPath, `- ${card.id} | scheduled | ${card.notificationAt} | ${JSON.stringify(reminderText)}\n`, "utf8");
   }
   return card;
 }

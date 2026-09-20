@@ -84,6 +84,9 @@ export class ReminderScheduler {
         }
         if (deliveredCount > 0) {
           await appendFile(join(this.workspace, "DELIVERED.md"), `- ${card.id} | ${now.toISOString()}\n`, "utf8");
+          console.log(`[apns] delivered card=${card.id} devices=${deliveredCount}/${tokens.length}`);
+        } else {
+          console.error(`[apns] delivery failed for all devices card=${card.id}`);
         }
       }
     } finally { this.running = false; }

@@ -16,6 +16,7 @@ export interface ServerOptions {
   workspaceDir: string;
   assistant: Assistant;
   notifySnapshotChanged?: () => Promise<void>;
+  deliverReminders?: () => Promise<void>;
   logger?: boolean | { level: string };
 }
 
@@ -43,7 +44,12 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     return { ...snapshot, version: `${snapshot.version}.${activeJobCount}`, isProcessing: activeJobCount > 0, activeJobCount };
   };
   const enqueuePrompt = async (text: string, now: string, timezone: string) => {
-    await createRelativeReminder(options.workspaceDir, text, new Date(now));
+    const immediateReminder = await createRelativeReminder(options.workspaceDir, text, new Date(now));
+    if (immediateReminder && options.deliverReminders) {
+      void options.deliverReminders().catch((error: unknown) => {
+        app.log.error({ err: error, reminderId: immediateReminder.id }, "immediate reminder delivery failed");
+      });
+    }
     const jobId = `prompt-${randomUUID()}`;
     const job: BackgroundJob = { id: jobId, kind: "prompt", status: "pending", createdAt: now, updatedAt: now };
     jobs.set(jobId, job);

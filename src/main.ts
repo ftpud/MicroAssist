@@ -42,6 +42,7 @@ const app = buildServer({
   assistant,
   logger: { level: config.logLevel },
   notifySnapshotChanged,
+  deliverReminders: () => reminders.tick(),
 });
 
 const report = (name: string, operation: () => Promise<unknown>) => async () => {

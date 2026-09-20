@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { Mutex } from "./mutex.js";
@@ -41,11 +43,14 @@ export class CodexAssistant implements Assistant {
     return this.mutex.runExclusive(async () => {
       await this.start();
       if (!this.session) throw new Error("ACP session is unavailable");
+      const contextualPrompt = `${prompt}\n\n${await this.workspaceContext()}`;
       const startedAt = Date.now();
       const turn = Math.random().toString(36).slice(2, 8);
-      if (this.verbose) console.log(`[codex:${turn}] started model=${this.model} promptChars=${prompt.length}`);
-      const responsePromise = this.session.prompt(prompt);
+      if (this.verbose) console.log(`[codex:${turn}] started model=${this.model} promptChars=${contextualPrompt.length}`);
+      const responsePromise = this.session.prompt(contextualPrompt);
       let text = "";
+      let responseBuffer = "";
+      let thinking = false;
       for (;;) {
         const message = await this.session.nextUpdate();
         if (message.kind === "stop") break;
@@ -54,16 +59,24 @@ export class CodexAssistant implements Assistant {
           case "agent_message_chunk":
             if (update.content.type === "text") {
               text += update.content.text;
-              if (this.verbose) console.log(`[codex:${turn}] response ${JSON.stringify(update.content.text)}`);
+              responseBuffer += update.content.text;
+              thinking = false;
+              if (this.verbose && (/[.!?。！？]\s*$|\n$/.test(responseBuffer) || responseBuffer.length >= 160)) {
+                console.log(`[codex:${turn}] response ${JSON.stringify(responseBuffer)}`);
+                responseBuffer = "";
+              }
             }
             break;
           case "agent_thought_chunk":
-            if (this.verbose) console.log(`[codex:${turn}] thinking`);
+            if (this.verbose && !thinking) console.log(`[codex:${turn}] thinking`);
+            thinking = true;
             break;
           case "tool_call":
+            thinking = false;
             if (this.verbose) console.log(`[codex:${turn}] tool ${update.status ?? "pending"}: ${update.title}`);
             break;
           case "tool_call_update":
+            thinking = false;
             if (this.verbose && (update.status || update.title)) {
               console.log(`[codex:${turn}] tool ${update.status ?? "update"}: ${update.title ?? update.toolCallId}`);
             }
@@ -79,12 +92,38 @@ export class CodexAssistant implements Assistant {
         }
       }
       const response = await responsePromise;
+      if (this.verbose && responseBuffer) console.log(`[codex:${turn}] response ${JSON.stringify(responseBuffer)}`);
       if (this.verbose) console.log(`[codex:${turn}] finished stop=${response.stopReason} elapsedMs=${Date.now() - startedAt} responseChars=${text.length}`);
       if (response.stopReason !== "end_turn") {
         throw new Error(`Codex turn stopped: ${response.stopReason}`);
       }
       return text.trim();
     });
+  }
+
+  private async workspaceContext(): Promise<string> {
+    const files = ["AGENTS.md", "MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md", "REMINDERS.md", "DISMISSED.md"];
+    const sections = await Promise.all(files.map(async (name) => {
+      try {
+        const content = await readFile(join(this.workspaceDir, name), "utf8");
+        return `--- ${name}\n${content.slice(-30_000)}`;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return `--- ${name}\n<missing>`;
+        throw error;
+      }
+    }));
+    let journal = "<missing>";
+    try { journal = (await readFile(join(this.workspaceDir, "JOURNAL.md"), "utf8")).slice(-12_000); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return `WORKSPACE STATE SNAPSHOT
+The following is the fresh state captured after this turn acquired the exclusive session lock. Treat it as authoritative. Do not run pwd, rg, find, cat, sed, tail, or another read/inspection command for these files. Make all necessary state changes in one batched edit tool call. Do not reread files merely to verify the edit. Read from disk only if required information is genuinely absent from this snapshot.
+
+${sections.join("\n\n")}
+
+--- JOURNAL.md (tail)
+${journal}
+END WORKSPACE STATE SNAPSHOT`;
   }
 
   async close(): Promise<void> {
