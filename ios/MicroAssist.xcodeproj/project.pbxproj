@@ -1,0 +1,109 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00000000000000000000101 /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000001; };
+		A00000000000000000000102 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002; };
+		A00000000000000000000103 /* ActualCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000003; };
+		A00000000000000000000104 /* AssistantAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004; };
+		A00000000000000000000105 /* MarkdownSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005; };
+		A00000000000000000000111 /* MicroAssistApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011; };
+		A00000000000000000000112 /* AssistantViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012; };
+		A00000000000000000000113 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013; };
+		A00000000000000000000114 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014; };
+		A00000000000000000000115 /* SendToAssistantIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015; };
+		A00000000000000000000121 /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000001; };
+		A00000000000000000000122 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002; };
+		A00000000000000000000123 /* ActualCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000003; };
+		A00000000000000000000124 /* AssistantAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004; };
+		A00000000000000000000125 /* MarkdownSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005; };
+		A00000000000000000000126 /* MicroAssistWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000021; };
+		A00000000000000000000127 /* MicroAssistWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022; };
+		A00000000000000000000130 /* MicroAssistWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000032; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A00000000000000000000201 = {isa = PBXContainerItemProxy; containerPortal = A00000000000000000000400 /* Project object */; proxyType = 1; remoteGlobalIDString = A00000000000000000000302; remoteInfo = MicroAssistWidgetExtension; };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A00000000000000000000504 /* Embed App Extensions */ = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A00000000000000000000130 /* MicroAssistWidgetExtension.appex in Embed App Extensions */, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A00000000000000000000001 /* SharedConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConfig.swift; sourceTree = "<group>"; };
+		A00000000000000000000002 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		A00000000000000000000003 /* ActualCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActualCache.swift; sourceTree = "<group>"; };
+		A00000000000000000000004 /* AssistantAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantAPI.swift; sourceTree = "<group>"; };
+		A00000000000000000000005 /* MarkdownSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownSummary.swift; sourceTree = "<group>"; };
+		A00000000000000000000011 /* MicroAssistApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroAssistApp.swift; sourceTree = "<group>"; };
+		A00000000000000000000012 /* AssistantViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantViewModel.swift; sourceTree = "<group>"; };
+		A00000000000000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A00000000000000000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A00000000000000000000015 /* SendToAssistantIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendToAssistantIntent.swift; sourceTree = "<group>"; };
+		A00000000000000000000016 /* MicroAssist.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MicroAssist.entitlements; sourceTree = "<group>"; };
+		A00000000000000000000021 /* MicroAssistWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroAssistWidgetBundle.swift; sourceTree = "<group>"; };
+		A00000000000000000000022 /* MicroAssistWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroAssistWidget.swift; sourceTree = "<group>"; };
+		A00000000000000000000023 /* MicroAssistWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MicroAssistWidget.entitlements; sourceTree = "<group>"; };
+		A00000000000000000000024 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A00000000000000000000031 /* MicroAssist.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MicroAssist.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000032 /* MicroAssistWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MicroAssistWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A00000000000000000000502 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000512 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00000000000000000000600 = {isa = PBXGroup; children = (A00000000000000000000601 /* Shared */, A00000000000000000000602 /* MicroAssist */, A00000000000000000000603 /* MicroAssistWidget */, A00000000000000000000604 /* Products */, ); sourceTree = "<group>"; };
+		A00000000000000000000601 /* Shared */ = {isa = PBXGroup; children = (A00000000000000000000001, A00000000000000000000002, A00000000000000000000003, A00000000000000000000004, A00000000000000000000005, ); path = Shared; sourceTree = "<group>"; };
+		A00000000000000000000602 /* MicroAssist */ = {isa = PBXGroup; children = (A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000014, A00000000000000000000015, A00000000000000000000016, ); path = MicroAssist; sourceTree = "<group>"; };
+		A00000000000000000000603 /* MicroAssistWidget */ = {isa = PBXGroup; children = (A00000000000000000000021, A00000000000000000000022, A00000000000000000000023, A00000000000000000000024, ); path = MicroAssistWidget; sourceTree = "<group>"; };
+		A00000000000000000000604 /* Products */ = {isa = PBXGroup; children = (A00000000000000000000031, A00000000000000000000032, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000301 /* MicroAssist */ = {isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000801; buildPhases = (A00000000000000000000501, A00000000000000000000502, A00000000000000000000503, A00000000000000000000504, ); buildRules = (); dependencies = (A00000000000000000000202, ); name = MicroAssist; productName = MicroAssist; productReference = A00000000000000000000031; productType = "com.apple.product-type.application"; };
+		A00000000000000000000302 /* MicroAssistWidgetExtension */ = {isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000802; buildPhases = (A00000000000000000000511, A00000000000000000000512, A00000000000000000000513, ); buildRules = (); dependencies = (); name = MicroAssistWidgetExtension; productName = MicroAssistWidgetExtension; productReference = A00000000000000000000032; productType = "com.apple.product-type.app-extension"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000400 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 2610; LastUpgradeCheck = 2610; TargetAttributes = {A00000000000000000000301 = {CreatedOnToolsVersion = 26.1; }; A00000000000000000000302 = {CreatedOnToolsVersion = 26.1; }; }; }; buildConfigurationList = A00000000000000000000800; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = A00000000000000000000600; productRefGroup = A00000000000000000000604; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000301, A00000000000000000000302, ); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A00000000000000000000503 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000513 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A00000000000000000000501 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000101, A00000000000000000000102, A00000000000000000000103, A00000000000000000000104, A00000000000000000000105, A00000000000000000000111, A00000000000000000000112, A00000000000000000000113, A00000000000000000000114, A00000000000000000000115, ); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000511 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000121, A00000000000000000000122, A00000000000000000000123, A00000000000000000000124, A00000000000000000000125, A00000000000000000000126, A00000000000000000000127, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A00000000000000000000202 = {isa = PBXTargetDependency; target = A00000000000000000000302; targetProxy = A00000000000000000000201; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A00000000000000000000701 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_OPTIMIZATION_LEVEL = 0; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE; ONLY_ACTIVE_ARCH = YES; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		A00000000000000000000702 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MTL_ENABLE_DEBUG_INFO = NO; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; VALIDATE_PRODUCT = YES; }; name = Release; };
+		A00000000000000000000711 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = MicroAssist/MicroAssist.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = MicroAssist; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity"; INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.microassist.app; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		A00000000000000000000712 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = MicroAssist/MicroAssist.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = MicroAssist; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity"; INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.microassist.app; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+		A00000000000000000000721 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = MicroAssistWidget/MicroAssistWidget.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MicroAssistWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.microassist.app.widget; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		A00000000000000000000722 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = MicroAssistWidget/MicroAssistWidget.entitlements; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MicroAssistWidget/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.microassist.app.widget; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A00000000000000000000800 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000701, A00000000000000000000702, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00000000000000000000801 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000711, A00000000000000000000712, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00000000000000000000802 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000721, A00000000000000000000722, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000400 /* Project object */;
+}

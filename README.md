@@ -53,3 +53,31 @@ npm test
 npm run typecheck
 npm run build
 ```
+
+## iPhone app
+
+Open [ios/MicroAssist.xcodeproj](ios/MicroAssist.xcodeproj) in Xcode. The project contains the SwiftUI app, WidgetKit extension, shared App Group cache, Keychain credentials, and the `Send to Assistant` App Intent. It targets iOS 17 or newer.
+
+Before installing on a device:
+
+1. Select your Apple development team for both targets.
+2. Change `com.microassist.app` and `com.microassist.app.widget` if those bundle IDs are unavailable.
+3. Change `group.com.microassist.shared` consistently in both entitlements files and `SharedConfig.swift`, then enable that App Group for both targets.
+4. Ensure both targets have Keychain Sharing enabled with `com.microassist.shared`.
+5. Build and run `MicroAssist`, open Settings, and enter the externally reachable HTTPS server URL and bearer token. `127.0.0.1` on an iPhone refers to the phone, not this server.
+
+To create the dictation shortcut, open Shortcuts and make a new shortcut with two actions:
+
+1. `Dictate Text`
+2. `Send to Assistant`, with the dictated text passed into its Text parameter
+
+The intent refreshes all widget timelines after the server responds. The widget also refreshes from `/actual.md` approximately every 90 minutes and displays its App Group cache when offline; iOS may delay background refreshes.
+
+Command-line compile check:
+
+```sh
+xcodebuild -project ios/MicroAssist.xcodeproj \
+  -scheme MicroAssist \
+  -sdk iphonesimulator \
+  CODE_SIGNING_ALLOWED=NO build
+```

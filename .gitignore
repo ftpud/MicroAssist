@@ -5,3 +5,5 @@ dist/
 backups/
 workspace/
 *.log
+ios/**/xcuserdata/
+ios/DerivedData/

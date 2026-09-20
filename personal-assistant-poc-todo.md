@@ -213,15 +213,15 @@ iOS может отложить запрошенный refresh, поэтому �
 
 ## TODO — iPhone
 
-- [ ] Создать минимальное SwiftUI-приложение.
-- [ ] Создать WidgetKit extension.
-- [ ] Настроить App Group cache.
-- [ ] Загружать и показывать `/actual.md`.
-- [ ] Показывать cached версию без сети.
-- [ ] Создать App Intent `SendToAssistant`.
+- [x] Создать минимальное SwiftUI-приложение.
+- [x] Создать WidgetKit extension.
+- [x] Настроить App Group cache.
+- [x] Загружать и показывать `/actual.md`.
+- [x] Показывать cached версию без сети.
+- [x] Создать App Intent `SendToAssistant`.
 - [ ] Создать Shortcut `Dictate Text → SendToAssistant`.
-- [ ] После prompt обновлять timeline виджета.
-- [ ] Хранить server URL и bearer token в Keychain.
+- [x] После prompt обновлять timeline виджета.
+- [x] Хранить server URL и bearer token в Keychain.
 
 ## Проверка POC
 
