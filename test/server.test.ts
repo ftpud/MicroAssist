@@ -111,7 +111,12 @@ test("prompt validates input and passes time context to the assistant", async ()
     headers: { authorization: "Bearer secret" },
     payload: { text: "Купить хлеб", now: "2026-09-20T14:35:00+03:00", timezone: "Europe/Riga" },
   });
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 202);
+  assert.equal(response.headers["retry-after"], "2");
+  // The HTTP response must not wait for the assistant turn.
+  while (assistant.prompts.length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
   assert.match(assistant.prompts[0]!, /Купить хлеб/);
   assert.match(assistant.prompts[0]!, /2026-09-20T14:35:00\+03:00/);
   await app.close();

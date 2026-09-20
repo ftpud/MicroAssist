@@ -12,6 +12,7 @@ await mkdir(config.workspaceDir, { recursive: true });
 const assistant = new CodexAssistant(config.workspaceDir);
 const apns = config.apns ? new ApnsClient(config.apns) : undefined;
 if (apns) await apns.start();
+else console.warn("APNs push delivery is disabled: configure APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC, and APNS_KEY_PATH");
 const reminders = new ReminderScheduler(config.workspaceDir, config.timezone, apns);
 reminders.start();
 const app = buildServer({

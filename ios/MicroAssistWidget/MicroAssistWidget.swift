@@ -19,7 +19,7 @@ struct ActualProvider: TimelineProvider {
         Task {
             let old = ActualCache.load()
             if let credentials = try? Credentials.load() {
-                if case .modified(let snapshot, let etag) = try? await AssistantAPI(credentials: credentials).fetchSnapshot(etag: old?.etag) {
+                if case .modified(let snapshot, let etag) = try? await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true) {
                     ActualCache.save(snapshot: snapshot, etag: etag)
                 }
             }

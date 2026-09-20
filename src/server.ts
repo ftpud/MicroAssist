@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Assistant } from "./assistant.js";
 import { assertTimezone } from "./config.js";
 import { refreshPrompt, userPrompt } from "./prompts.js";
-import { dismissCard, readSnapshot } from "./cards.js";
+import { createRelativeReminder, dismissCard, readSnapshot } from "./cards.js";
 import { registerDevice, unregisterDevice } from "./reminders.js";
 
 export interface ServerOptions {
@@ -119,9 +119,19 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       const timezone = request.body.timezone ?? options.timezone;
       if (typeof timezone !== "string") throw new Error("timezone must be a string");
       assertTimezone(timezone);
-      await options.assistant.run(userPrompt(text.trim(), now, timezone));
+      const prompt = userPrompt(text.trim(), now, timezone);
+      await createRelativeReminder(options.workspaceDir, text.trim(), new Date(now));
       const snapshot = await readSnapshot(options.workspaceDir, timezone, new Date(now));
-      return reply.header("ETag", `"${snapshot.version}"`).send(snapshot);
+      // Codex turns can take tens of seconds. Accept the command first and let
+      // the assistant's own mutex process queued turns in order.
+      void options.assistant.run(prompt).catch((error: unknown) => {
+        request.log.error({ err: error }, "background assistant turn failed");
+      });
+      return reply
+        .header("ETag", `"${snapshot.version}"`)
+        .header("Retry-After", "2")
+        .code(202)
+        .send(snapshot);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       if (message.startsWith("Invalid TIMEZONE") || message.startsWith("now must")) {

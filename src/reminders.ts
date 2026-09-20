@@ -59,8 +59,16 @@ export class ReminderScheduler {
       for (const card of snapshot.cards) {
         if (!card.notificationAt || Date.parse(card.notificationAt) > now.getTime() || delivered.has(card.id)) continue;
         if (tokens.length === 0) continue;
-        await Promise.all(tokens.map((token) => this.apns!.send(token, card.title, card.bodyMarkdown.slice(0, 180), card.id)));
-        await appendFile(join(this.workspace, "DELIVERED.md"), `- ${card.id} | ${now.toISOString()}\n`, "utf8");
+        const results = await Promise.allSettled(
+          tokens.map((token) => this.apns!.send(token, card.title, card.bodyMarkdown.slice(0, 180), card.id)),
+        );
+        const deliveredCount = results.filter((result) => result.status === "fulfilled").length;
+        for (const result of results) {
+          if (result.status === "rejected") console.error("APNs delivery failed", result.reason);
+        }
+        if (deliveredCount > 0) {
+          await appendFile(join(this.workspace, "DELIVERED.md"), `- ${card.id} | ${now.toISOString()}\n`, "utf8");
+        }
       }
     } finally { this.running = false; }
   }

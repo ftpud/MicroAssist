@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const cardKinds = ["actual", "response", "reminder", "morning", "lunch", "evening", "notice"] as const;
@@ -139,4 +139,38 @@ export async function dismissCard(workspace: string, cardId: string, now = new D
   const existing = await optionalFile(path, "# Dismissed cards\n\n");
   if (parseDismissed(existing).has(cardId)) return;
   await appendFile(path, `- ${cardId} | ${now.toISOString()}\n`, "utf8");
+}
+
+/** Creates the common relative reminder synchronously, so the client can
+ * schedule a local notification without waiting for a model turn. */
+export async function createRelativeReminder(workspace: string, text: string, now: Date): Promise<Card | undefined> {
+  const match = text.match(/(?:через|in)\s+(\d{1,5})\s*(минут(?:у|ы)?|мин|minutes?|mins?|час(?:а|ов)?|hours?|hrs?)/iu);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const hours = /час|hour|hr/iu.test(match[2]!);
+  const delay = amount * (hours ? 60 * 60_000 : 60_000);
+  if (!Number.isSafeInteger(delay) || delay < 60_000 || delay > 365 * 24 * 60 * 60_000) return undefined;
+
+  const notificationAt = new Date(now.getTime() + delay);
+  const digest = createHash("sha256").update(`${text.trim()}\n${notificationAt.toISOString()}`).digest("hex").slice(0, 20);
+  const card: Card = {
+    id: `reminder-${digest}`,
+    kind: "reminder",
+    title: "Напоминание",
+    bodyMarkdown: text.trim(),
+    priority: 100,
+    createdAt: now.toISOString(),
+    visibleFrom: now.toISOString(),
+    visibleUntil: new Date(notificationAt.getTime() + 24 * 60 * 60_000).toISOString(),
+    notificationAt: notificationAt.toISOString(),
+    dismissible: true,
+    kaomoji: "( •̀ᴗ•́ )و",
+    source: "prompt",
+  };
+  const path = join(workspace, "CARDS.md");
+  const existing = parseCards(await optionalFile(path, "# Cards\n"));
+  if (!existing.some((candidate) => candidate.id === card.id)) {
+    await writeFile(path, serializeCards([card, ...existing]), "utf8");
+  }
+  return card;
 }

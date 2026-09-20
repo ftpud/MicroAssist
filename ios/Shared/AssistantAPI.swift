@@ -22,10 +22,15 @@ struct AssistantAPI: Sendable {
 
     let credentials: Credentials
 
-    func fetchSnapshot(etag: String? = nil) async throws -> FetchResult {
-        var request = URLRequest(url: endpoint("snapshot"))
+    func fetchSnapshot(etag: String? = nil, forceRefresh: Bool = false) async throws -> FetchResult {
+        var request = URLRequest(
+            url: endpoint("snapshot"),
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 30
+        )
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
-        if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        if let etag, !forceRefresh { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
         if http.statusCode == 304 { return .notModified }
@@ -48,7 +53,9 @@ struct AssistantAPI: Sendable {
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
-        guard http.statusCode == 200 else { throw serverError(status: http.statusCode, data: data) }
+        guard http.statusCode == 200 || http.statusCode == 202 else {
+            throw serverError(status: http.statusCode, data: data)
+        }
         let snapshot = try JSONDecoder().decode(AssistantSnapshot.self, from: data)
         ActualCache.save(snapshot: snapshot, etag: http.value(forHTTPHeaderField: "ETag"))
         return snapshot

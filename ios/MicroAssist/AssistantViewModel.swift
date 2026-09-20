@@ -32,7 +32,9 @@ final class AssistantViewModel: ObservableObject {
         do {
             guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
             let cached = ActualCache.load()
-            switch try await AssistantAPI(credentials: credentials).fetchSnapshot(etag: cached?.etag) {
+            // Foreground refreshes deliberately bypass URLCache and ETag. This repairs
+            // stale/corrupt shared caches and makes pull-to-refresh authoritative.
+            switch try await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true) {
             case .modified(let snapshot, let etag):
                 ActualCache.save(snapshot: snapshot, etag: etag)
                 markdown = snapshot.actualMarkdown

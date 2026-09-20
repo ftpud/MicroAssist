@@ -42,8 +42,7 @@ struct SendToAssistantIntent: AppIntent {
             try? await center.add(request)
         }
         WidgetCenter.shared.reloadAllTimelines()
-        let response = snapshot.cards.first(where: { $0.kind == "response" })?.title ?? "Sent to your assistant."
-        return .result(dialog: IntentDialog(stringLiteral: response))
+        return .result(dialog: "Принято — обработаю в фоне.")
     }
 }
 

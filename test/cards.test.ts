@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { dismissCard, parseCards, readSnapshot, serializeCards, type Card } from "../src/cards.js";
+import { createRelativeReminder, dismissCard, parseCards, readSnapshot, serializeCards, type Card } from "../src/cards.js";
 
 const card: Card = {
   id: "reminder-2026-09-20-1435",
@@ -35,4 +35,14 @@ test("snapshot filters future, expired, and dismissed cards", async () => {
   const dismissed = await readSnapshot(workspace, "Europe/Riga", new Date("2026-09-20T11:34:40Z"));
   assert.equal(dismissed.cards.length, 0);
   assert.match(await readFile(join(workspace, "DISMISSED.md"), "utf8"), new RegExp(card.id));
+});
+
+test("relative reminder is available before the background model turn", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "micro-assist-reminder-"));
+  await writeFile(join(workspace, "ACTUAL.md"), "# Актуальное\n", "utf8");
+  const now = new Date("2026-09-20T12:00:00.000Z");
+  const card = await createRelativeReminder(workspace, "Напомни через 5 минут проверить духовку", now);
+  assert.equal(card?.notificationAt, "2026-09-20T12:05:00.000Z");
+  const snapshot = await readSnapshot(workspace, "Europe/Riga", now);
+  assert.equal(snapshot.cards[0]?.id, card?.id);
 });
