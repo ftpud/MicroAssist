@@ -1,0 +1,24 @@
+services:
+  assistant:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      WORKSPACE_DIR: /app/workspace
+      BACKUP_DIR: /app/backups
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./workspace:/app/workspace
+      - ./backups:/app/backups
+      # For ChatGPT login instead of OPENAI_API_KEY, mount a dedicated Codex config directory.
+      # Codex needs this directory writable for its local session database:
+      # - ~/.codex:/home/node/.codex
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
