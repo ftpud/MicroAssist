@@ -8,6 +8,7 @@ export interface Config {
   workspaceDir: string;
   backupDir: string;
   logLevel: string;
+  apns?: { keyId: string; teamId: string; topic: string; keyPath: string; production: boolean };
 }
 
 function validTimezone(value: string): string {
@@ -28,6 +29,10 @@ export function loadConfig(env = process.env): Config {
     throw new Error(`Invalid PORT: ${env.PORT}`);
   }
 
+  const apnsValues = [env.APNS_KEY_ID, env.APNS_TEAM_ID, env.APNS_TOPIC, env.APNS_KEY_PATH];
+  if (apnsValues.some(Boolean) && !apnsValues.every(Boolean)) {
+    throw new Error("APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC, and APNS_KEY_PATH must be set together");
+  }
   return {
     token,
     host: env.HOST ?? "127.0.0.1",
@@ -36,6 +41,10 @@ export function loadConfig(env = process.env): Config {
     workspaceDir: resolve(env.WORKSPACE_DIR ?? "workspace"),
     backupDir: resolve(env.BACKUP_DIR ?? "backups"),
     logLevel: env.LOG_LEVEL ?? "info",
+    apns: apnsValues.every(Boolean) ? {
+      keyId: env.APNS_KEY_ID!, teamId: env.APNS_TEAM_ID!, topic: env.APNS_TOPIC!,
+      keyPath: resolve(env.APNS_KEY_PATH!), production: env.APNS_PRODUCTION === "true",
+    } : undefined,
   };
 }
 

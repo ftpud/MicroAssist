@@ -5,4 +5,5 @@ enum SharedConfig {
     static let keychainService = "com.microassist.credentials"
     static let serverURLAccount = "server-url"
     static let tokenAccount = "bearer-token"
+    static let deviceTokenAccount = "apns-device-token"
 }

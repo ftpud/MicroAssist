@@ -13,6 +13,21 @@ struct ContentView: View {
                         Text(error).foregroundStyle(.red)
                     }
                 }
+                if !model.cards.isEmpty {
+                    Section("Сейчас") {
+                        ForEach(model.cards) { card in
+                            ReadOnlyCardView(card: card)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: card.dismissible) {
+                                    if card.dismissible {
+                                        Button("Закрыть", systemImage: "xmark") {
+                                            Task { await model.dismiss(card) }
+                                        }
+                                        .tint(.indigo)
+                                    }
+                                }
+                        }
+                    }
+                }
                 ForEach(model.sections) { section in
                     Section(section.title) {
                         ForEach(section.items, id: \.self) { item in
@@ -53,5 +68,32 @@ struct ContentView: View {
                 SettingsView { Task { await model.refresh() } }
             }
         }
+    }
+}
+
+private struct ReadOnlyCardView: View {
+    let card: AssistantCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.title).font(.headline)
+                Spacer()
+                if let kaomoji = card.kaomoji { Text(kaomoji).accessibilityHidden(true) }
+            }
+            Text(attributedBody)
+                .font(.body)
+                .textSelection(.enabled)
+            if card.dismissible {
+                Text("Смахните влево, чтобы закрыть")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var attributedBody: AttributedString {
+        (try? AttributedString(markdown: card.bodyMarkdown)) ?? AttributedString(card.bodyMarkdown)
     }
 }

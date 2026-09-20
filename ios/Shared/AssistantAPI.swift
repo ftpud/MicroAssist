@@ -16,25 +16,25 @@ enum AssistantAPIError: LocalizedError {
 
 struct AssistantAPI: Sendable {
     enum FetchResult: Sendable {
-        case modified(markdown: String, etag: String?)
+        case modified(snapshot: AssistantSnapshot, etag: String?)
         case notModified
     }
 
     let credentials: Credentials
 
-    func fetchActual(etag: String? = nil) async throws -> FetchResult {
-        var request = URLRequest(url: endpoint("actual.md"))
+    func fetchSnapshot(etag: String? = nil) async throws -> FetchResult {
+        var request = URLRequest(url: endpoint("snapshot"))
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
         if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
         if http.statusCode == 304 { return .notModified }
         guard http.statusCode == 200 else { throw serverError(status: http.statusCode, data: data) }
-        guard let markdown = String(data: data, encoding: .utf8) else { throw AssistantAPIError.invalidResponse }
-        return .modified(markdown: markdown, etag: http.value(forHTTPHeaderField: "ETag"))
+        let snapshot = try JSONDecoder().decode(AssistantSnapshot.self, from: data)
+        return .modified(snapshot: snapshot, etag: http.value(forHTTPHeaderField: "ETag"))
     }
 
-    func sendPrompt(_ text: String) async throws -> String {
+    func sendPrompt(_ text: String) async throws -> AssistantSnapshot {
         var request = URLRequest(url: endpoint("prompt"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
@@ -49,9 +49,29 @@ struct AssistantAPI: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
         guard http.statusCode == 200 else { throw serverError(status: http.statusCode, data: data) }
-        guard let markdown = String(data: data, encoding: .utf8) else { throw AssistantAPIError.invalidResponse }
-        ActualCache.save(markdown: markdown, etag: http.value(forHTTPHeaderField: "ETag"))
-        return markdown
+        let snapshot = try JSONDecoder().decode(AssistantSnapshot.self, from: data)
+        ActualCache.save(snapshot: snapshot, etag: http.value(forHTTPHeaderField: "ETag"))
+        return snapshot
+    }
+
+    func dismissCard(id: String) async throws {
+        var request = URLRequest(url: endpoint("cards/\(id)/dismiss"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
+        guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
+    }
+
+    func registerDevice(token: String) async throws {
+        var request = URLRequest(url: endpoint("devices/register"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["token": token])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
+        guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
     }
 
     private func endpoint(_ path: String) -> URL {

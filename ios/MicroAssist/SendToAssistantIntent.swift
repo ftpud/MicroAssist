@@ -1,4 +1,5 @@
 import AppIntents
+import UserNotifications
 import WidgetKit
 
 struct SendToAssistantIntent: AppIntent {
@@ -18,9 +19,31 @@ struct SendToAssistantIntent: AppIntent {
             return .result(dialog: "There is no text to send.")
         }
         guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
-        _ = try await AssistantAPI(credentials: credentials).sendPrompt(text)
+        let snapshot = try await AssistantAPI(credentials: credentials).sendPrompt(text)
+        let center = UNUserNotificationCenter.current()
+        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        for card in snapshot.cards {
+            guard let raw = card.notificationAt,
+                  let date = ISO8601DateFormatter().date(from: raw),
+                  date > Date() else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = card.title
+            content.body = String(card.bodyMarkdown.prefix(180))
+            content.sound = .default
+            content.userInfo = ["cardId": card.id]
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second], from: date
+            )
+            let request = UNNotificationRequest(
+                identifier: "card-\(card.id)",
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            )
+            try? await center.add(request)
+        }
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "Sent to your assistant.")
+        let response = snapshot.cards.first(where: { $0.kind == "response" })?.title ?? "Sent to your assistant."
+        return .result(dialog: IntentDialog(stringLiteral: response))
     }
 }
 

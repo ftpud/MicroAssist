@@ -5,6 +5,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Assistant } from "./assistant.js";
 import { assertTimezone } from "./config.js";
 import { refreshPrompt, userPrompt } from "./prompts.js";
+import { dismissCard, readSnapshot } from "./cards.js";
+import { registerDevice, unregisterDevice } from "./reminders.js";
 
 export interface ServerOptions {
   token: string;
@@ -54,6 +56,59 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     return reply.type("text/markdown; charset=utf-8").send(content);
   });
 
+  app.get("/snapshot", async (request, reply) => {
+    const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
+    const etag = `"${snapshot.version}"`;
+    reply.header("ETag", etag).header("Cache-Control", "private, no-cache");
+    if (request.headers["if-none-match"]?.split(",").map((value) => value.trim()).includes(etag)) {
+      return reply.code(304).send();
+    }
+    return snapshot;
+  });
+
+  app.get("/cards", async (request, reply) => {
+    const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
+    const body = { schemaVersion: snapshot.schemaVersion, version: snapshot.version, generatedAt: snapshot.generatedAt, timezone: snapshot.timezone, cards: snapshot.cards };
+    const etag = `"${snapshot.version}"`;
+    reply.header("ETag", etag).header("Cache-Control", "private, no-cache");
+    if (request.headers["if-none-match"]?.split(",").map((value) => value.trim()).includes(etag)) {
+      return reply.code(304).send();
+    }
+    return body;
+  });
+
+  app.post<{ Params: { id: string } }>("/cards/:id/dismiss", async (request, reply) => {
+    try {
+      const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
+      const card = snapshot.cards.find((candidate) => candidate.id === request.params.id);
+      if (!card) {
+        await dismissCard(options.workspaceDir, request.params.id);
+        return reply.code(204).send();
+      }
+      if (!card.dismissible) return reply.code(409).send({ error: "Card is not dismissible" });
+      await dismissCard(options.workspaceDir, card.id);
+      return reply.code(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid card";
+      return reply.code(400).send({ error: message });
+    }
+  });
+
+  app.post<{ Body: { token?: unknown } }>("/devices/register", async (request, reply) => {
+    if (typeof request.body?.token !== "string") return reply.code(400).send({ error: "token is required" });
+    try {
+      await registerDevice(options.workspaceDir, request.body.token);
+      return reply.code(204).send();
+    } catch (error) {
+      return reply.code(400).send({ error: (error as Error).message });
+    }
+  });
+
+  app.delete<{ Params: { token: string } }>("/devices/:token", async (request, reply) => {
+    await unregisterDevice(options.workspaceDir, request.params.token);
+    return reply.code(204).send();
+  });
+
   app.post<{ Body: { text?: unknown; now?: unknown; timezone?: unknown } }>("/prompt", async (request, reply) => {
     const text = request.body?.text;
     if (typeof text !== "string" || !text.trim() || text.length > 10_000) {
@@ -65,8 +120,8 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       if (typeof timezone !== "string") throw new Error("timezone must be a string");
       assertTimezone(timezone);
       await options.assistant.run(userPrompt(text.trim(), now, timezone));
-      const actual = await readFile(join(options.workspaceDir, "ACTUAL.md"), "utf8");
-      return reply.type("text/markdown; charset=utf-8").send(actual);
+      const snapshot = await readSnapshot(options.workspaceDir, timezone, new Date(now));
+      return reply.header("ETag", `"${snapshot.version}"`).send(snapshot);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       if (message.startsWith("Invalid TIMEZONE") || message.startsWith("now must")) {

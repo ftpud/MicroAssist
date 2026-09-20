@@ -26,6 +26,22 @@ class FakeAssistant implements Assistant {
 async function fixture() {
   const workspaceDir = await mkdtemp(join(tmpdir(), "micro-assist-test-"));
   await writeFile(join(workspaceDir, "ACTUAL.md"), "# Актуальное\n", "utf8");
+  await writeFile(join(workspaceDir, "CARDS.md"), `# Cards
+
+## card-001
+
+\`\`\`yaml
+id: "card-001"
+kind: "notice"
+title: "Read me"
+priority: 10
+createdAt: "2026-09-20T10:00:00.000Z"
+dismissible: true
+source: "test"
+\`\`\`
+
+**Markdown** body
+`, "utf8");
   const assistant = new FakeAssistant();
   const app = buildServer({ token: "secret", timezone: "Europe/Riga", workspaceDir, assistant });
   return { app, assistant };
@@ -59,6 +75,31 @@ test("actual.md supports ETag revalidation", async () => {
     headers: { authorization: "Bearer secret", "if-none-match": first.headers.etag },
   });
   assert.equal(second.statusCode, 304);
+  await app.close();
+});
+
+test("snapshot is atomic and cards support ETag revalidation", async () => {
+  const { app } = await fixture();
+  const headers = { authorization: "Bearer secret" };
+  const snapshot = await app.inject({ method: "GET", url: "/snapshot", headers });
+  assert.equal(snapshot.statusCode, 200);
+  assert.equal(snapshot.json().actualMarkdown, "# Актуальное\n");
+  assert.equal(snapshot.json().cards[0].bodyMarkdown, "**Markdown** body");
+  const cards = await app.inject({ method: "GET", url: "/cards", headers });
+  const unchanged = await app.inject({ method: "GET", url: "/cards", headers: { ...headers, "if-none-match": cards.headers.etag! } });
+  assert.equal(unchanged.statusCode, 304);
+  await app.close();
+});
+
+test("card dismissal is idempotent and removes it from snapshots", async () => {
+  const { app } = await fixture();
+  const headers = { authorization: "Bearer secret" };
+  const first = await app.inject({ method: "POST", url: "/cards/card-001/dismiss", headers });
+  assert.equal(first.statusCode, 204);
+  const snapshot = await app.inject({ method: "GET", url: "/snapshot", headers });
+  assert.deepEqual(snapshot.json().cards, []);
+  const repeated = await app.inject({ method: "POST", url: "/cards/card-001/dismiss", headers });
+  assert.equal(repeated.statusCode, 204);
   await app.close();
 });
 

@@ -54,6 +54,9 @@ struct SettingsView: View {
         do {
             try KeychainStore.write(url.absoluteString, account: SharedConfig.serverURLAccount)
             try KeychainStore.write(token, account: SharedConfig.tokenAccount)
+            if let deviceToken = try KeychainStore.read(account: SharedConfig.deviceTokenAccount) {
+                Task { try? await AssistantAPI(credentials: Credentials(serverURL: url, token: token)).registerDevice(token: deviceToken) }
+            }
             onSave()
             dismiss()
         } catch {

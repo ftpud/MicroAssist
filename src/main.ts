@@ -4,10 +4,16 @@ import { CodexAssistant } from "./assistant.js";
 import { backupWorkspace } from "./backup.js";
 import { loadConfig } from "./config.js";
 import { buildServer, refreshActual } from "./server.js";
+import { ApnsClient } from "./push.js";
+import { ReminderScheduler } from "./reminders.js";
 
 const config = loadConfig();
 await mkdir(config.workspaceDir, { recursive: true });
 const assistant = new CodexAssistant(config.workspaceDir);
+const apns = config.apns ? new ApnsClient(config.apns) : undefined;
+if (apns) await apns.start();
+const reminders = new ReminderScheduler(config.workspaceDir, config.timezone, apns);
+reminders.start();
 const app = buildServer({
   token: config.token,
   timezone: config.timezone,
@@ -34,6 +40,7 @@ const jobs = [
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, "shutting down");
   for (const job of jobs) job.stop();
+  reminders.stop();
   await app.close();
   await assistant.close();
 }
