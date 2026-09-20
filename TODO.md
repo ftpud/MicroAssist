@@ -2,18 +2,22 @@
 
 ## Product goal
 
-Turn the current `ACTUAL.md` summary into a synchronized stack of useful cards across the server, iPhone app, and widgets.
+Keep `ACTUAL.md` as the stable summarized overview, and add a synchronized stack of timely cards above it across the server, iPhone app, and widgets.
 
-A card can contain Markdown, represent the latest assistant response, highlight something urgent, or surface a reminder appropriate to the current time of day. Cards can be dismissed with a swipe. Reminder cards can also generate notifications at an exact time.
+A card can contain Markdown, represent the latest assistant response, highlight something urgent, or surface a reminder appropriate to the current time of day. Cards can be dismissed with a swipe without removing the underlying `ACTUAL.md` summary. Reminder cards can also generate notifications at an exact time.
 
 ## Guiding rules
 
 - Markdown remains the human-readable source of truth.
-- The server owns card IDs, ordering, urgency, schedules, and dismissal state.
-- The app and widget render the same server-generated card snapshot.
+- `ACTUAL.md` remains an independently generated summary and is never replaced by cards.
+- Cards are a temporary, high-priority layer rendered above the `ACTUAL.md` summary.
+- Cards are server-generated and immutable from the user's perspective.
+- The server exclusively owns card content, IDs, ordering, urgency, schedules, and dismissal state.
+- Users can only read a card or close/dismiss it; there is no card editing flow.
+- The app and widget render the same server-generated snapshot containing both cards and `ACTUAL.md`.
 - Every card has a stable ID so dismissals synchronize correctly.
 - Do not invent urgency, deadlines, or reminders that the user did not request.
-- The widget is read-only; card dismissal happens in the app or through an App Intent.
+- Widget content is read-only; dismissal happens in the app or through a dedicated dismiss action where WidgetKit permits it.
 - Cached cards remain visible offline.
 - Keep the first version single-user.
 
@@ -33,7 +37,7 @@ A card can contain Markdown, represent the latest assistant response, highlight 
   - `dismissible`: whether swipe-to-dismiss is allowed;
   - `kaomoji`: optional decorative character;
   - `source`: task, recurring item, memory, prompt response, or system refresh.
-- [ ] Define a deterministic Markdown representation in `CARDS.md` using one `##` section per card and a fenced YAML metadata block.
+- [ ] Define a deterministic, server-owned Markdown representation in `CARDS.md` using one `##` section per card and a fenced YAML metadata block.
 - [ ] Add TypeScript types and validation for cards.
 - [ ] Reject malformed cards, duplicate IDs, invalid timezones, and invalid date ranges.
 - [ ] Add fixture cards covering every card kind.
@@ -41,13 +45,15 @@ A card can contain Markdown, represent the latest assistant response, highlight 
 
 Acceptance criteria:
 
-- [ ] A person can read and edit `CARDS.md` without special tooling.
+- [ ] `CARDS.md` remains human-readable for diagnostics, but only the server/Codex workflow writes it.
+- [ ] No client-facing operation allows a user to edit card title, body, metadata, priority, or schedule.
 - [ ] The server can parse and serialize `CARDS.md` without losing Markdown content.
 - [ ] Parse → serialize → parse produces equivalent cards.
 
 ## Phase 2 — generate genuinely current cards
 
-- [ ] Replace the broad “rebuild ACTUAL” prompt with a structured card-generation prompt.
+- [ ] Improve the existing `ACTUAL.md` generation prompt so the summary remains concise, current, and independent of temporary cards.
+- [ ] Add a separate structured card-generation step after rebuilding `ACTUAL.md`.
 - [ ] Pass the exact current time, timezone, weekday, and local time-of-day period to Codex.
 - [ ] Require Codex to derive cards only from `MEMORY.md`, `TASKS.md`, `RECURRING.md`, the latest prompt, and explicit reminder state.
 - [ ] Generate a maximum of 10 active cards.
@@ -60,7 +66,8 @@ Acceptance criteria:
   6. contextual morning/lunch/evening summaries.
 - [ ] Remove completed, expired, duplicated, and dismissed content.
 - [ ] Add deterministic server-side filtering after the model turn so expired cards never reach clients.
-- [ ] Generate `ACTUAL.md` from the validated card set for backwards compatibility.
+- [ ] Generate cards alongside `ACTUAL.md`; never derive the complete summary only from the temporary card set.
+- [ ] Allow cards to reference facts already present in `ACTUAL.md` without removing those facts from the summary.
 - [ ] Add evaluation fixtures for “what is actually relevant now.”
 - [ ] Test timezone changes and daylight-saving transitions.
 
@@ -69,16 +76,18 @@ Acceptance criteria:
 - [ ] “Remind me in 5 minutes” is not shown as generally upcoming after it expires.
 - [ ] Completed tasks disappear from active cards.
 - [ ] No date or obligation appears unless supported by state or the user’s prompt.
-- [ ] App, widget, and `ACTUAL.md` agree on the same active information.
+- [ ] App and widget show the same cards above the same `ACTUAL.md` summary.
 
 ## Phase 3 — cards API and synchronization
 
 - [ ] Implement `GET /cards` returning versioned JSON with Markdown bodies.
+- [ ] Implement `GET /snapshot` returning cards and `actualMarkdown` atomically so clients cannot mix generations.
 - [ ] Add `ETag` and `304 Not Modified` support to `/cards`.
 - [ ] Include `generatedAt`, timezone, and snapshot version in every response.
 - [ ] Keep `GET /actual.md` as a compatibility endpoint.
 - [ ] Return the newly generated/updated cards from `POST /prompt`.
 - [ ] Add `POST /cards/:id/dismiss`.
+- [ ] Do not implement `PUT`, `PATCH`, or content-editing endpoints for cards.
 - [ ] Store dismissal records in `DISMISSED.md` with card ID and timestamp.
 - [ ] Define when a dismissed recurring card may reappear, normally at its next recurrence.
 - [ ] Make dismissal idempotent.
@@ -109,9 +118,11 @@ Acceptance criteria:
 - [ ] Large Markdown cards do not overflow or crash the widget.
 - [ ] Links are tappable in the app and open only allowed URL schemes.
 
-## Phase 5 — iPhone card stack
+## Phase 5 — iPhone cards above ACTUAL
 
-- [ ] Replace the current section list with a card-stack screen.
+- [ ] Keep the current summarized `ACTUAL.md` section list as the main page content.
+- [ ] Add a card stack above the `ACTUAL.md` summary.
+- [ ] Present card content as read-only Markdown with no edit affordance, context-menu edit action, or text field.
 - [ ] Show one primary card prominently with the next cards visibly stacked behind it.
 - [ ] Add horizontal swipe-to-dismiss for dismissible cards.
 - [ ] Add spring animation and undo for accidental dismissals.
@@ -121,13 +132,16 @@ Acceptance criteria:
 - [ ] Add card-kind styling while keeping one coherent design system.
 - [ ] Show freshness and offline state without covering card content.
 - [ ] Add a detail view for full Markdown content.
+- [ ] Keep the `ACTUAL.md` summary visible after the last card is dismissed.
 - [ ] Add accessibility labels, Dynamic Type, VoiceOver actions, and Reduce Motion behavior.
 
 Acceptance criteria:
 
 - [ ] A card can be dismissed smoothly with one swipe.
+- [ ] The only card mutation available to the user is dismissal.
 - [ ] A failed dismissal restores the card or clearly marks it pending.
-- [ ] Relaunching the app shows exactly the cached server snapshot.
+- [ ] Relaunching the app shows exactly the cached cards and cached `ACTUAL.md` from one snapshot.
+- [ ] Dismissing every card reveals the unchanged summarized `ACTUAL.md` underneath.
 
 ## Phase 6 — latest response card
 
@@ -231,24 +245,25 @@ Acceptance criteria:
 - [ ] Turning graphics off removes them everywhere, including widgets.
 - [ ] Cards remain understandable without color, animation, or kaomoji.
 
-## Phase 11 — widget card stacks
+## Phase 11 — widget cards above ACTUAL
 
-- [ ] Make small widget show the single highest-priority card.
-- [ ] Make medium widget show the primary card plus a visible next-card preview.
-- [ ] Make large widget show 3–5 cards.
-- [ ] Make the iOS 27 full-page widget show the complete active stack.
+- [ ] Make the small widget show the highest-priority card when one exists, otherwise the first lines of `ACTUAL.md`.
+- [ ] Make the medium widget show the primary card on top and a compact `ACTUAL.md` summary below it.
+- [ ] Make the large widget show 2–3 cards on top and the summarized `ACTUAL.md` underneath.
+- [ ] Make the iOS 27 full-page widget show the active card stack at the top and the complete summarized `ACTUAL.md` below it.
 - [ ] Use `AppIntentConfiguration` for widget preferences where appropriate.
 - [ ] Add interactive next/previous controls where WidgetKit permits them.
 - [ ] Add a `DismissCardIntent` for interactive widget dismissal on supported OS versions.
 - [ ] Fall back to opening the app when interactive dismissal is unavailable.
 - [ ] Reload only affected widget timelines after prompt, dismissal, or reminder changes.
-- [ ] Keep the last valid card snapshot if network refresh fails.
+- [ ] Keep the last valid combined card-and-ACTUAL snapshot if network refresh fails.
 - [ ] Add widget previews and screenshots for every supported family.
 
 Acceptance criteria:
 
 - [ ] Every widget family displays a useful layout rather than a stretched small widget.
 - [ ] Widget ordering matches the app ordering.
+- [ ] Every non-small widget keeps the summarized `ACTUAL.md` visible below its cards.
 - [ ] The full-page iOS 27 widget is discoverable as a separate gallery option.
 
 ## Phase 12 — reliability, privacy, and rollout
@@ -270,7 +285,7 @@ Acceptance criteria:
 
 1. Card schema and `CARDS.md` parser.
 2. `/cards` endpoint and App Group file cache.
-3. iPhone card-stack UI and Markdown rendering.
+3. iPhone card stack above the existing ACTUAL summary, with Markdown rendering.
 4. Swipe dismissal and server synchronization.
 5. Latest-response cards.
 6. Better ACTUAL/card generation and relevance evaluations.
@@ -278,16 +293,16 @@ Acceptance criteria:
 8. Local notifications, followed by APNs delivery.
 9. Morning/lunch/evening cards.
 10. Kaomoji styling and accessibility.
-11. Widget layouts and interactive widget actions.
+11. Widget layouts with cards above ACTUAL and interactive widget actions.
 12. End-to-end reliability and migration testing.
 
 ## Final definition of done
 
-- [ ] A prompt creates a useful Markdown card and it appears in the app and widget from the same snapshot.
+- [ ] A prompt creates a useful Markdown card and updates `ACTUAL.md`; both appear in the app and widget from the same snapshot.
 - [ ] The latest response is visible as a dismissible card.
 - [ ] Swiping a card removes it everywhere without deleting unrelated state.
 - [ ] “Remind me in 5 minutes” produces exactly one on-time notification.
 - [ ] Morning, lunch, and evening cards appear only during their configured windows and contain genuinely relevant information.
-- [ ] All supported widget sizes, including the iOS 27 full-page widget, show purpose-built card layouts.
+- [ ] All supported widget sizes, including the iOS 27 full-page widget, show cards above the summarized ACTUAL content rather than replacing it.
 - [ ] Offline mode shows cached cards and reconciles safely when connectivity returns.
 - [ ] Markdown, accessibility, timezone handling, restart persistence, and notification permissions are covered by automated tests.
