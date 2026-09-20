@@ -81,6 +81,31 @@ struct AssistantAPI: Sendable {
         guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
     }
 
+    func fetchChat() async throws -> [ChatMessage] {
+        let data = try await get("chat")
+        return try JSONDecoder().decode(ChatResponse.self, from: data).messages
+    }
+
+    func fetchActivity() async throws -> [BackgroundJob] {
+        let data = try await get("activity")
+        return try JSONDecoder().decode(ActivityResponse.self, from: data).jobs
+    }
+
+    func fetchReminders() async throws -> [AssistantCard] {
+        let data = try await get("reminders")
+        return try JSONDecoder().decode(ReminderResponse.self, from: data).reminders
+    }
+
+    private func get(_ path: String) async throws -> Data {
+        var request = URLRequest(url: endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
+        guard http.statusCode == 200 else { throw serverError(status: http.statusCode, data: data) }
+        return data
+    }
+
     private func endpoint(_ path: String) -> URL {
         credentials.serverURL.appending(path: path)
     }
@@ -92,3 +117,24 @@ struct AssistantAPI: Sendable {
         return .server(status, message)
     }
 }
+
+struct ChatMessage: Codable, Identifiable, Sendable {
+    let id: String
+    let role: String
+    let text: String
+    let createdAt: String
+}
+
+private struct ChatResponse: Codable { let messages: [ChatMessage] }
+
+struct BackgroundJob: Codable, Identifiable, Sendable {
+    let id: String
+    let kind: String
+    let status: String
+    let createdAt: String
+    let updatedAt: String
+    let error: String?
+}
+
+private struct ActivityResponse: Codable { let jobs: [BackgroundJob] }
+private struct ReminderResponse: Codable { let reminders: [AssistantCard] }

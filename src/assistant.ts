@@ -6,7 +6,7 @@ import { Mutex } from "./mutex.js";
 
 export interface Assistant {
   readonly healthy: boolean;
-  run(prompt: string): Promise<void>;
+  run(prompt: string): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -33,14 +33,17 @@ export class CodexAssistant implements Assistant {
     return this.starting;
   }
 
-  async run(prompt: string): Promise<void> {
+  async run(prompt: string): Promise<string> {
     return this.mutex.runExclusive(async () => {
       await this.start();
       if (!this.session) throw new Error("ACP session is unavailable");
-      const response = await this.session.prompt(prompt);
+      const responsePromise = this.session.prompt(prompt);
+      const textPromise = this.session.readText();
+      const [response, text] = await Promise.all([responsePromise, textPromise]);
       if (response.stopReason !== "end_turn") {
         throw new Error(`Codex turn stopped: ${response.stopReason}`);
       }
+      return text.trim();
     });
   }
 

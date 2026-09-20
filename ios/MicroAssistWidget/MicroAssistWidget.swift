@@ -1,5 +1,24 @@
+import AppIntents
 import SwiftUI
 import WidgetKit
+
+struct DismissCardIntent: AppIntent {
+    static let title: LocalizedStringResource = "Закрыть карточку"
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Card ID") var cardID: String
+
+    init() { cardID = "" }
+    init(cardID: String) { self.cardID = cardID }
+
+    func perform() async throws -> some IntentResult {
+        guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+        try await AssistantAPI(credentials: credentials).dismissCard(id: cardID)
+        ActualCache.removeCard(id: cardID)
+        WidgetCenter.shared.reloadAllTimelines()
+        return .result()
+    }
+}
 
 struct ActualEntry: TimelineEntry {
     let date: Date
@@ -42,9 +61,8 @@ struct MicroAssistWidgetView: View {
                 Image(systemName: "sparkles").foregroundStyle(.tint)
             }
             if let cards = entry.cached?.cards, !cards.isEmpty {
-                ForEach(Array(cards.prefix(cardLimit))) { card in
-                    WidgetCardView(card: card, fullPage: isFullPage)
-                }
+                WidgetCardStack(cards: Array(cards.prefix(cardLimit)), fullPage: isFullPage)
+                    .frame(height: cardStackHeight)
                 if family != .systemSmall {
                     Divider()
                     actualContent(sections)
@@ -97,7 +115,21 @@ struct MicroAssistWidgetView: View {
 
     private var cardLimit: Int {
         if isFullPage { return 4 }
-        return family == .systemLarge ? 3 : 1
+        switch family {
+        case .systemSmall: return 3
+        case .systemLarge: return 4
+        default: return 3
+        }
+    }
+
+    private var cardStackHeight: CGFloat {
+        if isFullPage { return 300 }
+        switch family {
+        case .systemSmall: return 105
+        case .systemMedium: return 68
+        case .systemLarge: return 155
+        default: return 90
+        }
     }
 
     private var sectionSpacing: CGFloat {
@@ -105,9 +137,28 @@ struct MicroAssistWidgetView: View {
     }
 }
 
+private struct WidgetCardStack: View {
+    let cards: [AssistantCard]
+    let fullPage: Bool
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            ForEach(Array(cards.enumerated().reversed()), id: \.element.id) { index, card in
+                WidgetCardView(card: card, fullPage: fullPage, interactive: index == 0)
+                    .scaleEffect(1 - CGFloat(index) * 0.025, anchor: .top)
+                    .offset(y: CGFloat(index) * (fullPage ? 12 : 7))
+                    .zIndex(Double(cards.count - index))
+                    .allowsHitTesting(index == 0)
+            }
+        }
+        .padding(.bottom, CGFloat(max(0, cards.count - 1)) * (fullPage ? 12 : 7))
+    }
+}
+
 private struct WidgetCardView: View {
     let card: AssistantCard
     let fullPage: Bool
+    let interactive: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -115,17 +166,41 @@ private struct WidgetCardView: View {
                 Text(card.title).font(fullPage ? .title3.bold() : .caption.bold())
                 Spacer()
                 if let kaomoji = card.kaomoji { Text(kaomoji).accessibilityHidden(true) }
+                if interactive && card.dismissible {
+                    Button(intent: DismissCardIntent(cardID: card.id)) {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Закрыть карточку")
+                }
             }
             Text(attributedBody)
                 .font(fullPage ? .body : .caption)
-                .lineLimit(fullPage ? 6 : 3)
+                .lineLimit(fullPage ? 10 : 4)
+            Spacer(minLength: 0)
         }
-        .padding(6)
-        .background(.tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(fullPage ? 14 : 8)
+        .background(cardColor, in: RoundedRectangle(cornerRadius: fullPage ? 20 : 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: fullPage ? 20 : 14, style: .continuous)
+                .stroke(.white.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 5, y: 3)
     }
 
     private var attributedBody: AttributedString {
         (try? AttributedString(markdown: card.bodyMarkdown)) ?? AttributedString(card.bodyMarkdown)
+    }
+
+    private var cardColor: Color {
+        switch card.kind {
+        case "reminder": return .orange.opacity(0.30)
+        case "morning": return .yellow.opacity(0.28)
+        case "evening": return .indigo.opacity(0.25)
+        case "response": return .blue.opacity(0.24)
+        default: return .accentColor.opacity(0.18)
+        }
     }
 }
 

@@ -12,12 +12,13 @@ class FakeAssistant implements Assistant {
   active = 0;
   maxActive = 0;
 
-  async run(prompt: string): Promise<void> {
+  async run(prompt: string): Promise<string> {
     this.active += 1;
     this.maxActive = Math.max(this.maxActive, this.active);
     await new Promise((resolve) => setTimeout(resolve, 10));
     this.prompts.push(prompt);
     this.active -= 1;
+    return "Готово";
   }
 
   async close(): Promise<void> {}
@@ -119,6 +120,13 @@ test("prompt validates input and passes time context to the assistant", async ()
   }
   assert.match(assistant.prompts[0]!, /Купить хлеб/);
   assert.match(assistant.prompts[0]!, /2026-09-20T14:35:00\+03:00/);
+  let activity;
+  do {
+    activity = await app.inject({ method: "GET", url: "/activity", headers: { authorization: "Bearer secret" } });
+    if (activity.json().jobs[0]?.status !== "completed") await new Promise((resolve) => setTimeout(resolve, 2));
+  } while (activity.json().jobs[0]?.status !== "completed");
+  const chat = await app.inject({ method: "GET", url: "/chat", headers: { authorization: "Bearer secret" } });
+  assert.deepEqual(chat.json().messages.map((message: { role: string }) => message.role), ["user", "assistant"]);
   await app.close();
 });
 

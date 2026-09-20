@@ -123,7 +123,7 @@ Acceptance criteria:
 - [x] Keep the current summarized `ACTUAL.md` section list as the main page content.
 - [x] Add a card stack above the `ACTUAL.md` summary.
 - [x] Present card content as read-only Markdown with no edit affordance, context-menu edit action, or text field.
-- [ ] Show one primary card prominently with the next cards visibly stacked behind it.
+- [x] Show cards as prominent full-size panels above the summary.
 - [x] Add horizontal swipe-to-dismiss for dismissible cards.
 - [ ] Add spring animation and undo for accidental dismissals.
 - [ ] Send dismissal to the server before permanently removing the cached card.
@@ -253,7 +253,7 @@ Acceptance criteria:
 - [x] Make the iOS 27 full-page widget show the active card stack at the top and the complete summarized `ACTUAL.md` below it.
 - [ ] Use `AppIntentConfiguration` for widget preferences where appropriate.
 - [ ] Add interactive next/previous controls where WidgetKit permits them.
-- [ ] Add a `DismissCardIntent` for interactive widget dismissal on supported OS versions.
+- [x] Add a `DismissCardIntent` for interactive widget dismissal on supported OS versions.
 - [ ] Fall back to opening the app when interactive dismissal is unavailable.
 - [ ] Reload only affected widget timelines after prompt, dismissal, or reminder changes.
 - [x] Keep the last valid combined card-and-ACTUAL snapshot if network refresh fails.

@@ -1,12 +1,13 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Assistant } from "./assistant.js";
 import { assertTimezone } from "./config.js";
 import { refreshPrompt, userPrompt } from "./prompts.js";
-import { createRelativeReminder, dismissCard, readSnapshot } from "./cards.js";
+import { createRelativeReminder, dismissCard, readReminderHistory, readSnapshot } from "./cards.js";
 import { registerDevice, unregisterDevice } from "./reminders.js";
+import { appendChat, readChat, type BackgroundJob } from "./activity.js";
 
 export interface ServerOptions {
   token: string;
@@ -33,6 +34,7 @@ function normalizedNow(value: unknown): string {
 
 export function buildServer(options: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 32 * 1024 });
+  const jobs = new Map<string, BackgroundJob>();
 
   app.get("/health", async (_request, reply) => {
     const status = options.assistant.healthy ? 200 : 503;
@@ -76,6 +78,16 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     }
     return body;
   });
+
+  app.get("/chat", async () => ({ messages: await readChat(options.workspaceDir) }));
+
+  app.get("/reminders", async () => ({
+    reminders: await readReminderHistory(options.workspaceDir),
+  }));
+
+  app.get("/activity", async () => ({
+    jobs: [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50),
+  }));
 
   app.post<{ Params: { id: string } }>("/cards/:id/dismiss", async (request, reply) => {
     try {
@@ -121,15 +133,32 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       assertTimezone(timezone);
       const prompt = userPrompt(text.trim(), now, timezone);
       await createRelativeReminder(options.workspaceDir, text.trim(), new Date(now));
+      const jobId = `prompt-${randomUUID()}`;
+      const job: BackgroundJob = { id: jobId, kind: "prompt", status: "pending", createdAt: now, updatedAt: now };
+      jobs.set(jobId, job);
+      await appendChat(options.workspaceDir, { id: randomUUID(), role: "user", text: text.trim(), createdAt: now });
       const snapshot = await readSnapshot(options.workspaceDir, timezone, new Date(now));
       // Codex turns can take tens of seconds. Accept the command first and let
       // the assistant's own mutex process queued turns in order.
-      void options.assistant.run(prompt).catch((error: unknown) => {
-        request.log.error({ err: error }, "background assistant turn failed");
-      });
+      void (async () => {
+        job.status = "running";
+        job.updatedAt = new Date().toISOString();
+        try {
+          const answer = await options.assistant.run(prompt);
+          if (answer) await appendChat(options.workspaceDir, { id: randomUUID(), role: "assistant", text: answer, createdAt: new Date().toISOString() });
+          job.status = "completed";
+        } catch (error) {
+          job.status = "failed";
+          job.error = error instanceof Error ? error.message : "Unknown error";
+          request.log.error({ err: error }, "background assistant turn failed");
+        } finally {
+          job.updatedAt = new Date().toISOString();
+        }
+      })();
       return reply
         .header("ETag", `"${snapshot.version}"`)
         .header("Retry-After", "2")
+        .header("X-Job-ID", jobId)
         .code(202)
         .send(snapshot);
     } catch (error) {

@@ -106,6 +106,10 @@ async function optionalFile(path: string, fallback: string): Promise<string> {
   }
 }
 
+export async function readAllCards(workspace: string): Promise<Card[]> {
+  return parseCards(await optionalFile(join(workspace, "CARDS.md"), "# Cards\n"));
+}
+
 export async function readSnapshot(workspace: string, timezone: string, now = new Date()): Promise<Snapshot> {
   const [actualMarkdown, cardMarkdown, dismissedMarkdown] = await Promise.all([
     readFile(join(workspace, "ACTUAL.md"), "utf8"),
@@ -172,5 +176,26 @@ export async function createRelativeReminder(workspace: string, text: string, no
   if (!existing.some((candidate) => candidate.id === card.id)) {
     await writeFile(path, serializeCards([card, ...existing]), "utf8");
   }
+  const reminderPath = join(workspace, "REMINDERS.md");
+  const reminderState = await optionalFile(reminderPath, "# Reminders\n\n");
+  if (!reminderState.includes(`- ${card.id} |`)) {
+    await appendFile(reminderPath, `- ${card.id} | scheduled | ${card.notificationAt} | ${JSON.stringify(text.trim())}\n`, "utf8");
+  }
   return card;
+}
+
+export async function readReminderHistory(workspace: string): Promise<Card[]> {
+  const content = await optionalFile(join(workspace, "REMINDERS.md"), "# Reminders\n");
+  return content.split("\n").flatMap((line) => {
+    const match = line.match(/^-\s+([^|\s]+)\s+\|\s+([^|]+)\s+\|\s+([^|]+)\s+\|\s+(.+)$/);
+    if (!match || Number.isNaN(Date.parse(match[3]!.trim()))) return [];
+    let body = match[4]!.trim();
+    try { body = String(JSON.parse(body)); } catch { /* keep human-edited text */ }
+    const notificationAt = match[3]!.trim();
+    return [{
+      id: match[1]!, kind: "reminder" as const, title: `Напоминание · ${match[2]!.trim()}`,
+      bodyMarkdown: body, priority: 0, createdAt: notificationAt, notificationAt,
+      dismissible: false, source: "reminder-history",
+    }];
+  });
 }
