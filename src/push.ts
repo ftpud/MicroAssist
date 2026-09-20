@@ -14,25 +14,51 @@ function base64url(value: string | Buffer): string {
   return Buffer.from(value).toString("base64url");
 }
 
+export class ApnsError extends Error {
+  constructor(public readonly status: number, public readonly reason: string) {
+    super(`APNs ${status}: ${reason}`);
+    this.name = "ApnsError";
+  }
+
+  get invalidDeviceToken(): boolean {
+    return this.reason === "BadDeviceToken" || this.reason === "DeviceTokenNotForTopic" || this.reason === "Unregistered";
+  }
+}
+
 export class ApnsClient {
   private key?: string;
   private jwt?: { value: string; createdAt: number };
 
   constructor(private readonly config: PushConfig) {}
 
-  async send(deviceToken: string, title: string, body: string, cardId: string): Promise<void> {
-    const host = this.config.production ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
+  async send(deviceToken: string, title: string, body: string, cardId: string, production = this.config.production): Promise<void> {
+    // Combining the visible alert with content-available gives iOS an
+    // opportunity to refresh the shared snapshot and WidgetKit while the
+    // reminder is delivered. The separate silent refresh remains a fallback.
+    await this.request(deviceToken, JSON.stringify({
+      aps: { alert: { title, body }, sound: "default", "content-available": 1 },
+      cardId,
+      reason: "card-notification",
+    }), "alert", "10", production);
+  }
+
+  async sendRefresh(deviceToken: string, production = this.config.production): Promise<void> {
+    await this.request(deviceToken, JSON.stringify({ aps: { "content-available": 1 }, reason: "snapshot-updated" }), "background", "5", production);
+  }
+
+  private async request(deviceToken: string, payload: string, pushType: "alert" | "background", priority: "10" | "5", production: boolean): Promise<void> {
+    const host = production ? "https://api.push.apple.com" : "https://api.sandbox.push.apple.com";
     const client = connect(host);
     try {
-      const payload = JSON.stringify({ aps: { alert: { title, body }, sound: "default" }, cardId });
       await new Promise<void>((resolve, reject) => {
+        client.once("error", reject);
         const request = client.request({
           ":method": "POST",
           ":path": `/3/device/${deviceToken}`,
           authorization: `bearer ${this.token()}`,
           "apns-topic": this.config.topic,
-          "apns-push-type": "alert",
-          "apns-priority": "10",
+          "apns-push-type": pushType,
+          "apns-priority": priority,
           "content-type": "application/json",
         });
         let status = 0;
@@ -40,7 +66,12 @@ export class ApnsClient {
         request.setEncoding("utf8");
         request.on("response", (headers) => { status = Number(headers[":status"] ?? 0); });
         request.on("data", (chunk) => { response += chunk; });
-        request.on("end", () => status === 200 ? resolve() : reject(new Error(`APNs ${status}: ${response}`)));
+        request.on("end", () => {
+          if (status === 200) return resolve();
+          let reason = response;
+          try { reason = String((JSON.parse(response) as { reason?: unknown }).reason ?? response); } catch { /* raw APNs response */ }
+          reject(new ApnsError(status, reason));
+        });
         request.on("error", reject);
         request.end(payload);
       });

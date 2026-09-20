@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import WidgetKit
 
 @main
 struct MicroAssistApp: App {
@@ -35,5 +36,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task {
+            guard let credentials = try? Credentials.load() else {
+                completionHandler(.noData)
+                return
+            }
+            do {
+                if case .modified(let snapshot, let etag) = try await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true) {
+                    ActualCache.save(snapshot: snapshot, etag: etag)
+                    WidgetCenter.shared.reloadAllTimelines()
+                    completionHandler(.newData)
+                } else {
+                    completionHandler(.noData)
+                }
+            } catch {
+                completionHandler(.failed)
+            }
+        }
     }
 }

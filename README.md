@@ -16,7 +16,7 @@ npm run build
 npm start
 ```
 
-The process starts one `codex-acp` subprocess and one persistent ACP session rooted at `workspace/`. Set `OPENAI_API_KEY`, or log in with the Codex CLI in the same OS account before starting the service. The Codex account must also be able to write its own `~/.codex` state directory.
+The process starts one `codex-acp` subprocess and one persistent ACP session rooted at `workspace/`. Set `OPENAI_API_KEY`, or log in with the Codex CLI in the same OS account before starting the service. The Codex account must also be able to write its own `~/.codex` state directory. The server uses `gpt-5.6-terra` by default; override it with `CODEX_MODEL` in `.env`. `CODEX_VERBOSE=true` (the default) streams turn timing, tool status, plans, and response chunks to server stdout; set it to `false` for quiet operation.
 
 ```sh
 curl http://127.0.0.1:3000/health
@@ -37,9 +37,13 @@ The app also exposes the persistent current-session conversation (`GET /chat`), 
 
 In `TIMEZONE` local time, the server refreshes at 07:00 and every two hours from 09:00 through 21:00. A successful prompt rebuilds `ACTUAL.md` in the same model turn. At 02:30 it copies `workspace/` to `backups/` and retains the latest 14 snapshots.
 
+Recurring content is user-controlled. A prompt such as “Каждое утро в 10 присылай мне новый мотивационный пост” creates an enabled cron entry in `RECURRING.md`. The server notices schedule changes without a restart, asks Codex to generate fresh content when the event fires, creates a card, and delivers its notification. The app's “Таймеры” tab lists recurring events and one-time reminders; swipe either one left to delete it.
+
 Reminder cards with `notificationAt` are scheduled locally by the app. For delivery when a reminder was created elsewhere, configure APNs in `.env` with `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`, and `APNS_KEY_PATH`; set `APNS_PRODUCTION=true` for App Store/TestFlight device tokens. Keep the `.p8` key outside the repository. The server polls due reminder cards every 15 seconds and persists delivered IDs so restarts do not resend them.
 
-For an Xcode development install use `APNS_PRODUCTION=false`; for TestFlight use `APNS_PRODUCTION=true`. `APNS_TOPIC` must exactly match the app bundle identifier (`com.microassist.ftpud` in this project). Restart the server after changing these values. At startup it prints a warning when push delivery is disabled, and APNs delivery errors are logged without exposing device tokens.
+The app records whether each token came from an Xcode debug build (sandbox) or a TestFlight/App Store build (production), so both can use the same server. `APNS_PRODUCTION` remains the fallback for tokens registered by older app builds. `APNS_TOPIC` must exactly match the app bundle identifier (`com.microassist.ftpud` in this project). Restart the server after changing APNs credentials. At startup it prints a warning when push delivery is disabled, and APNs delivery errors are logged without exposing device tokens.
+
+After every successful Codex turn, the server also sends a silent background APNs notification to registered devices. The app downloads the new snapshot into the App Group and asks WidgetKit to reload its timelines. Silent pushes are best-effort and may be delayed or throttled by iOS; they require the same APNs configuration and the app's `remote-notification` background mode.
 
 ## Docker
 
@@ -67,6 +71,8 @@ npm run build
 Open [ios/MicroAssist.xcodeproj](ios/MicroAssist.xcodeproj) in Xcode. The project contains the SwiftUI app, WidgetKit extension, shared App Group cache, Keychain credentials, and the `Send to Assistant` App Intent. It targets iOS 17 or newer.
 
 The app has four tabs: the card/ACTUAL overview, the ongoing Codex chat, all known reminder timers, and live background-job status. Sending from chat returns immediately while the same persistent ACP session processes the message in the background.
+
+Shortcuts exposes two actions: `Send to Assistant` accepts work immediately for background processing, while `Ask Assistant and Wait` waits up to 230 seconds on the server (with a 245-second iOS network timeout) and returns the actual Codex response. If the wait expires, processing continues in the background and remains visible in the app/widget status.
 
 Before installing on a device:
 

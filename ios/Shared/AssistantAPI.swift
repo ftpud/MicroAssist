@@ -53,12 +53,46 @@ struct AssistantAPI: Sendable {
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
-        guard http.statusCode == 200 || http.statusCode == 202 else {
+        if http.statusCode == 204, let cached = ActualCache.load() {
+            return AssistantSnapshot(
+                schemaVersion: 1,
+                version: cached.version ?? "cached",
+                generatedAt: ISO8601DateFormatter().string(from: cached.updatedAt),
+                timezone: TimeZone.current.identifier,
+                actualMarkdown: cached.markdown,
+                cards: cached.cards,
+                isProcessing: true,
+                activeJobCount: 1
+            )
+        }
+        guard (200...299).contains(http.statusCode) else {
             throw serverError(status: http.statusCode, data: data)
         }
         let snapshot = try JSONDecoder().decode(AssistantSnapshot.self, from: data)
         ActualCache.save(snapshot: snapshot, etag: http.value(forHTTPHeaderField: "ETag"))
         return snapshot
+    }
+
+    func sendPromptAndWait(_ text: String) async throws -> BlockingPromptResponse {
+        var request = URLRequest(url: endpoint("prompt/blocking"), timeoutInterval: 245)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "text": text,
+            "now": formatter.string(from: Date()),
+            "timezone": TimeZone.current.identifier,
+        ])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
+        guard http.statusCode == 200 || http.statusCode == 202 else {
+            throw serverError(status: http.statusCode, data: data)
+        }
+        let result = try JSONDecoder().decode(BlockingPromptResponse.self, from: data)
+        ActualCache.save(snapshot: result.snapshot, etag: nil)
+        return result
     }
 
     func dismissCard(id: String) async throws {
@@ -67,7 +101,7 @@ struct AssistantAPI: Sendable {
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
-        guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
+        guard (200...299).contains(http.statusCode) else { throw serverError(status: http.statusCode, data: data) }
     }
 
     func registerDevice(token: String) async throws {
@@ -75,10 +109,15 @@ struct AssistantAPI: Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(["token": token])
+        #if DEBUG
+        let environment = "sandbox"
+        #else
+        let environment = "production"
+        #endif
+        request.httpBody = try JSONEncoder().encode(["token": token, "environment": environment])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
-        guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
+        guard (200...299).contains(http.statusCode) else { throw serverError(status: http.statusCode, data: data) }
     }
 
     func fetchChat() async throws -> [ChatMessage] {
@@ -94,6 +133,28 @@ struct AssistantAPI: Sendable {
     func fetchReminders() async throws -> [AssistantCard] {
         let data = try await get("reminders")
         return try JSONDecoder().decode(ReminderResponse.self, from: data).reminders
+    }
+
+    func deleteReminder(id: String) async throws {
+        try await delete("reminders/\(id)")
+    }
+
+    func fetchRecurring() async throws -> [RecurringEvent] {
+        let data = try await get("recurring")
+        return try JSONDecoder().decode(RecurringResponse.self, from: data).events
+    }
+
+    func deleteRecurring(id: String) async throws {
+        try await delete("recurring/\(id)")
+    }
+
+    private func delete(_ path: String) async throws {
+        var request = URLRequest(url: endpoint(path), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AssistantAPIError.invalidResponse }
+        guard http.statusCode == 204 else { throw serverError(status: http.statusCode, data: data) }
     }
 
     private func get(_ path: String) async throws -> Data {
@@ -138,3 +199,18 @@ struct BackgroundJob: Codable, Identifiable, Sendable {
 
 private struct ActivityResponse: Codable { let jobs: [BackgroundJob] }
 private struct ReminderResponse: Codable { let reminders: [AssistantCard] }
+private struct RecurringResponse: Codable { let events: [RecurringEvent] }
+
+struct RecurringEvent: Codable, Identifiable, Sendable {
+    let id: String
+    let cron: String
+    let timezone: String
+    let prompt: String
+    let enabled: Bool
+}
+
+struct BlockingPromptResponse: Codable, Sendable {
+    let completed: Bool
+    let answer: String?
+    let snapshot: AssistantSnapshot
+}

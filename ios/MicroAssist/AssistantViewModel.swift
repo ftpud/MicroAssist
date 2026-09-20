@@ -10,6 +10,7 @@ final class AssistantViewModel: ObservableObject {
     @Published var lastUpdated: Date?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isProcessing = false
 
     var sections: [SummarySection] { MarkdownSummary.sections(from: markdown, itemLimit: 10) }
 
@@ -39,12 +40,14 @@ final class AssistantViewModel: ObservableObject {
                 ActualCache.save(snapshot: snapshot, etag: etag)
                 markdown = snapshot.actualMarkdown
                 cards = snapshot.cards
+                isProcessing = snapshot.isProcessing ?? false
                 lastUpdated = Date()
                 await scheduleNotifications(for: snapshot.cards)
                 WidgetCenter.shared.reloadAllTimelines()
             case .notModified:
                 markdown = cached?.markdown ?? markdown
                 cards = cached?.cards ?? cards
+                isProcessing = cached?.isProcessing ?? false
                 lastUpdated = cached?.updatedAt
             }
             errorMessage = nil
@@ -74,6 +77,7 @@ final class AssistantViewModel: ObservableObject {
         guard let cached = ActualCache.load() else { return }
         markdown = cached.markdown
         cards = cached.cards
+        isProcessing = cached.isProcessing
         lastUpdated = cached.updatedAt
     }
 

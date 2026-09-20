@@ -43,7 +43,10 @@ struct ActualProvider: TimelineProvider {
                 }
             }
             let entry = ActualEntry(date: Date(), cached: ActualCache.load() ?? old)
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(90 * 60))))
+            // WidgetKit may defer refreshes, so APNs remains the primary trigger.
+            // This shorter timeline is a safety net when a background push is throttled.
+            let interval: TimeInterval = entry.cached?.isProcessing == true ? 60 : 15 * 60
+            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(interval))))
         }
     }
 }
@@ -58,6 +61,11 @@ struct MicroAssistWidgetView: View {
             HStack {
                 Text("Актуальное").font(isFullPage ? .title2.bold() : .headline)
                 Spacer()
+                if entry.cached?.isProcessing == true {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Codex обрабатывает запрос")
+                }
                 Image(systemName: "sparkles").foregroundStyle(.tint)
             }
             if let cards = entry.cached?.cards, !cards.isEmpty {
@@ -195,11 +203,11 @@ private struct WidgetCardView: View {
 
     private var cardColor: Color {
         switch card.kind {
-        case "reminder": return .orange.opacity(0.30)
-        case "morning": return .yellow.opacity(0.28)
-        case "evening": return .indigo.opacity(0.25)
-        case "response": return .blue.opacity(0.24)
-        default: return .accentColor.opacity(0.18)
+        case "reminder": return Color(red: 1.00, green: 0.78, blue: 0.34)
+        case "morning": return Color(red: 1.00, green: 0.90, blue: 0.46)
+        case "evening": return Color(red: 0.63, green: 0.58, blue: 0.92)
+        case "response": return Color(red: 0.55, green: 0.78, blue: 1.00)
+        default: return Color(red: 0.62, green: 0.88, blue: 0.76)
         }
     }
 }

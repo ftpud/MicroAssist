@@ -45,7 +45,7 @@ source: "test"
 `, "utf8");
   const assistant = new FakeAssistant();
   const app = buildServer({ token: "secret", timezone: "Europe/Riga", workspaceDir, assistant });
-  return { app, assistant };
+  return { app, assistant, workspaceDir };
 }
 
 test("health reports ACP state without authentication", async () => {
@@ -139,5 +139,34 @@ test("invalid timezone is rejected", async () => {
     payload: { text: "Купить хлеб", timezone: "Moon/Base" },
   });
   assert.equal(response.statusCode, 400);
+  await app.close();
+});
+
+test("blocking prompt returns the actual assistant response", async () => {
+  const { app } = await fixture();
+  const response = await app.inject({
+    method: "POST",
+    url: "/prompt/blocking",
+    headers: { authorization: "Bearer secret" },
+    payload: { text: "Что сейчас важно?", now: "2026-09-20T14:35:00+03:00", timezone: "Europe/Riga" },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().completed, true);
+  assert.equal(response.json().answer, "Готово");
+  assert.equal(response.json().snapshot.isProcessing, false);
+  await app.close();
+});
+
+test("recurring events are listed and deleted", async () => {
+  const { app, workspaceDir } = await fixture();
+  await writeFile(join(workspaceDir, "RECURRING.md"), "# Recurring\n\n- morning-post | enabled | 0 10 * * * | Europe/Riga | \"Мотивационный пост\"\n", "utf8");
+  const headers = { authorization: "Bearer secret" };
+  const listed = await app.inject({ method: "GET", url: "/recurring", headers });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json().events[0].id, "morning-post");
+  const removed = await app.inject({ method: "DELETE", url: "/recurring/morning-post", headers });
+  assert.equal(removed.statusCode, 204);
+  const missing = await app.inject({ method: "DELETE", url: "/recurring/morning-post", headers });
+  assert.equal(missing.statusCode, 404);
   await app.close();
 });

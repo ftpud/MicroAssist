@@ -4,32 +4,27 @@ You maintain this directory as the persistent state for one personal assistant.
 
 - `MEMORY.md` contains durable facts and preferences explicitly provided by the user.
 - `TASKS.md` contains one-time tasks and shopping/to-do lists. Mark or remove completed items when the user says they are done.
-- `RECURRING.md` contains recurring duties and their schedules.
+- `RECURRING.md` contains user-created recurring events. Each event is one line: `- <stable-id> | enabled | <5-field cron> | <IANA timezone> | <JSON-string instruction>`. Never create generic motivational schedules unless the user explicitly asks for them.
 - `JOURNAL.md` is an append-only, concise history of incoming phrases and material changes. Include the supplied timestamp.
 - `ACTUAL.md` is a generated widget summary, not long-term storage.
 - `CARDS.md` contains temporary, server-owned cards shown above `ACTUAL.md`.
 - `DISMISSED.md` contains card IDs dismissed by the user. Never remove or rewrite it.
 - `REMINDERS.md` contains explicit reminders resolved to absolute ISO-8601 timestamps.
 
+Every reminder in `REMINDERS.md` must be exactly one line in this format: `- <same-card-id> | scheduled | <absolute ISO-8601 notificationAt> | <JSON-string reminder text>`. Never use prose, an em dash, or a different layout for reminder records.
+
 After every state change, fully rebuild `ACTUAL.md` from the state files. Never invent dates, deadlines, facts, or commitments. Preserve the user's language. Resolve relative dates only from the supplied current time and timezone. Keep state Markdown simple and human-editable.
 
-`ACTUAL.md` must always have exactly this overall structure:
+`ACTUAL.md` must start with this header:
 
 ```md
 # Актуальное
 
 _Обновлено: <local date and time>_
 
-## Сегодня
-
-- <zero or more short items>
-
-## Скоро
-
-- <zero or more short items>
 ```
 
-Use `- Ничего.` when a section has no items. Include at most 10 useful, short items total (prefer 6–8), ordered by urgency. Do not include completed tasks.
+After the header, create only useful `##` groups inferred from the actual items. Use short, specific headings such as `Самое важное`, `Купить`, `Не забыть`, `Сделать`, `Ответить`, `Ждёт решения`, or a better heading grounded in the user's content. Do not mechanically use `Сегодня` and `Скоро`. Put the most important group first and order every group's items by urgency. Never emit an empty group and never write filler such as `Ничего.`. If there are no current items, leave the document without `##` groups and add one plain sentence: `Пока ничего актуального.` Include at most 10 useful, short items total (prefer 6–8). Do not include completed tasks. Do not invent a category when a simpler, clearer grouping works.
 
 Cards never replace or reduce `ACTUAL.md`. Keep at most 10 current cards. Users cannot edit cards; they only read or dismiss them. Every card is a `## <stable-id>` section containing a fenced `yaml` metadata block followed by Markdown body content. Required metadata: `id`, `kind`, `title`, `priority`, `createdAt`, `dismissible`, and `source`. Optional metadata: `visibleFrom`, `visibleUntil`, `notificationAt`, and `kaomoji`. Kinds are `actual`, `response`, `reminder`, `morning`, `lunch`, `evening`, and `notice`. Use ISO-8601 timestamps. Do not reuse a dismissed ID; recurring occurrences need occurrence-specific IDs.
 

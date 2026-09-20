@@ -18,7 +18,11 @@ export class CodexAssistant implements Assistant {
   private starting?: Promise<void>;
   private stopping = false;
 
-  constructor(private readonly workspaceDir: string) {}
+  constructor(
+    private readonly workspaceDir: string,
+    private readonly model = "gpt-5.6-terra",
+    private readonly verbose = true,
+  ) {}
 
   get healthy(): boolean {
     return Boolean(this.child && this.child.exitCode === null && this.connection && this.session);
@@ -37,9 +41,45 @@ export class CodexAssistant implements Assistant {
     return this.mutex.runExclusive(async () => {
       await this.start();
       if (!this.session) throw new Error("ACP session is unavailable");
+      const startedAt = Date.now();
+      const turn = Math.random().toString(36).slice(2, 8);
+      if (this.verbose) console.log(`[codex:${turn}] started model=${this.model} promptChars=${prompt.length}`);
       const responsePromise = this.session.prompt(prompt);
-      const textPromise = this.session.readText();
-      const [response, text] = await Promise.all([responsePromise, textPromise]);
+      let text = "";
+      for (;;) {
+        const message = await this.session.nextUpdate();
+        if (message.kind === "stop") break;
+        const update = message.update;
+        switch (update.sessionUpdate) {
+          case "agent_message_chunk":
+            if (update.content.type === "text") {
+              text += update.content.text;
+              if (this.verbose) console.log(`[codex:${turn}] response ${JSON.stringify(update.content.text)}`);
+            }
+            break;
+          case "agent_thought_chunk":
+            if (this.verbose) console.log(`[codex:${turn}] thinking`);
+            break;
+          case "tool_call":
+            if (this.verbose) console.log(`[codex:${turn}] tool ${update.status ?? "pending"}: ${update.title}`);
+            break;
+          case "tool_call_update":
+            if (this.verbose && (update.status || update.title)) {
+              console.log(`[codex:${turn}] tool ${update.status ?? "update"}: ${update.title ?? update.toolCallId}`);
+            }
+            break;
+          case "plan":
+            if (this.verbose) console.log(`[codex:${turn}] plan: ${update.entries.map((entry) => `${entry.status}:${entry.content}`).join(" | ")}`);
+            break;
+          case "usage_update":
+            if (this.verbose) console.log(`[codex:${turn}] usage update`);
+            break;
+          default:
+            break;
+        }
+      }
+      const response = await responsePromise;
+      if (this.verbose) console.log(`[codex:${turn}] finished stop=${response.stopReason} elapsedMs=${Date.now() - startedAt} responseChars=${text.length}`);
       if (response.stopReason !== "end_turn") {
         throw new Error(`Codex turn stopped: ${response.stopReason}`);
       }
@@ -61,12 +101,21 @@ export class CodexAssistant implements Assistant {
     this.clearDeadProcess();
     const require = createRequire(import.meta.url);
     const entrypoint = require.resolve("@agentclientprotocol/codex-acp/dist/index.js");
+    let codexConfig: Record<string, unknown> = {};
+    if (process.env.CODEX_CONFIG) {
+      try {
+        codexConfig = JSON.parse(process.env.CODEX_CONFIG) as Record<string, unknown>;
+      } catch {
+        throw new Error("CODEX_CONFIG must be a valid JSON object");
+      }
+    }
     const child = spawn(process.execPath, [entrypoint], {
       cwd: this.workspaceDir,
       env: {
         ...process.env,
         INITIAL_AGENT_MODE: "agent",
         NO_BROWSER: "1",
+        CODEX_CONFIG: JSON.stringify({ ...codexConfig, model: this.model }),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });

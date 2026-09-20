@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createRelativeReminder, dismissCard, parseCards, readSnapshot, serializeCards, type Card } from "../src/cards.js";
+import { createRelativeReminder, deleteReminder, dismissCard, parseCards, readReminderHistory, readSnapshot, serializeCards, type Card } from "../src/cards.js";
 
 const card: Card = {
   id: "reminder-2026-09-20-1435",
@@ -45,4 +45,21 @@ test("relative reminder is available before the background model turn", async ()
   assert.equal(card?.notificationAt, "2026-09-20T12:05:00.000Z");
   const snapshot = await readSnapshot(workspace, "Europe/Riga", now);
   assert.equal(snapshot.cards[0]?.id, card?.id);
+  assert.equal((await readReminderHistory(workspace)).length, 1);
+  assert.equal(await deleteReminder(workspace, card!.id), true);
+  assert.equal((await readReminderHistory(workspace)).length, 0);
+  assert.equal((await readSnapshot(workspace, "Europe/Riga", now)).cards.length, 0);
+});
+
+test("legacy model-written reminders are listed and deleted with their card", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "micro-assist-legacy-reminder-"));
+  await writeFile(join(workspace, "ACTUAL.md"), "# Актуальное\n", "utf8");
+  await writeFile(join(workspace, "CARDS.md"), serializeCards([card]), "utf8");
+  await writeFile(join(workspace, "REMINDERS.md"), `# Reminders\n\n- ${card.notificationAt} — Позвонить маме\n`, "utf8");
+  const reminders = await readReminderHistory(workspace);
+  assert.equal(reminders[0]?.id, card.id);
+  assert.equal(reminders[0]?.bodyMarkdown, "Позвонить маме");
+  assert.equal(await deleteReminder(workspace, card.id), true);
+  assert.equal((await readReminderHistory(workspace)).length, 0);
+  assert.equal(parseCards(await readFile(join(workspace, "CARDS.md"), "utf8")).length, 0);
 });

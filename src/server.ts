@@ -5,15 +5,17 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Assistant } from "./assistant.js";
 import { assertTimezone } from "./config.js";
 import { refreshPrompt, userPrompt } from "./prompts.js";
-import { createRelativeReminder, dismissCard, readReminderHistory, readSnapshot } from "./cards.js";
+import { createRelativeReminder, deleteReminder, dismissCard, readReminderHistory, readSnapshot } from "./cards.js";
 import { registerDevice, unregisterDevice } from "./reminders.js";
 import { appendChat, readChat, type BackgroundJob } from "./activity.js";
+import { deleteRecurring, readRecurring } from "./schedules.js";
 
 export interface ServerOptions {
   token: string;
   timezone: string;
   workspaceDir: string;
   assistant: Assistant;
+  notifySnapshotChanged?: () => Promise<void>;
   logger?: boolean | { level: string };
 }
 
@@ -35,6 +37,41 @@ function normalizedNow(value: unknown): string {
 export function buildServer(options: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 32 * 1024 });
   const jobs = new Map<string, BackgroundJob>();
+  const snapshotWithActivity = async (timezone: string, now = new Date()) => {
+    const snapshot = await readSnapshot(options.workspaceDir, timezone, now);
+    const activeJobCount = [...jobs.values()].filter((job) => job.status === "pending" || job.status === "running").length;
+    return { ...snapshot, version: `${snapshot.version}.${activeJobCount}`, isProcessing: activeJobCount > 0, activeJobCount };
+  };
+  const enqueuePrompt = async (text: string, now: string, timezone: string) => {
+    await createRelativeReminder(options.workspaceDir, text, new Date(now));
+    const jobId = `prompt-${randomUUID()}`;
+    const job: BackgroundJob = { id: jobId, kind: "prompt", status: "pending", createdAt: now, updatedAt: now };
+    jobs.set(jobId, job);
+    await appendChat(options.workspaceDir, { id: randomUUID(), role: "user", text, createdAt: now });
+    const completion = (async () => {
+      job.status = "running";
+      job.updatedAt = new Date().toISOString();
+      try {
+        const answer = await options.assistant.run(userPrompt(text, now, timezone));
+        if (answer) await appendChat(options.workspaceDir, { id: randomUUID(), role: "assistant", text: answer, createdAt: new Date().toISOString() });
+        job.status = "completed";
+        if (options.notifySnapshotChanged) {
+          void options.notifySnapshotChanged().catch((error: unknown) => {
+            app.log.error({ err: error, jobId }, "snapshot refresh push failed");
+          });
+        }
+        return answer;
+      } catch (error) {
+        job.status = "failed";
+        job.error = error instanceof Error ? error.message : "Unknown error";
+        app.log.error({ err: error, jobId }, "background assistant turn failed");
+        throw error;
+      } finally {
+        job.updatedAt = new Date().toISOString();
+      }
+    })();
+    return { jobId, completion };
+  };
 
   app.get("/health", async (_request, reply) => {
     const status = options.assistant.healthy ? 200 : 503;
@@ -59,7 +96,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   });
 
   app.get("/snapshot", async (request, reply) => {
-    const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
+    const snapshot = await snapshotWithActivity(options.timezone);
     const etag = `"${snapshot.version}"`;
     reply.header("ETag", etag).header("Cache-Control", "private, no-cache");
     if (request.headers["if-none-match"]?.split(",").map((value) => value.trim()).includes(etag)) {
@@ -85,6 +122,24 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     reminders: await readReminderHistory(options.workspaceDir),
   }));
 
+  app.delete<{ Params: { id: string } }>("/reminders/:id", async (request, reply) => {
+    try {
+      return reply.code(await deleteReminder(options.workspaceDir, request.params.id) ? 204 : 404).send();
+    } catch (error) {
+      return reply.code(400).send({ error: (error as Error).message });
+    }
+  });
+
+  app.get("/recurring", async () => ({ events: await readRecurring(options.workspaceDir) }));
+
+  app.delete<{ Params: { id: string } }>("/recurring/:id", async (request, reply) => {
+    try {
+      return reply.code(await deleteRecurring(options.workspaceDir, request.params.id) ? 204 : 404).send();
+    } catch (error) {
+      return reply.code(400).send({ error: (error as Error).message });
+    }
+  });
+
   app.get("/activity", async () => ({
     jobs: [...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50),
   }));
@@ -106,10 +161,13 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     }
   });
 
-  app.post<{ Body: { token?: unknown } }>("/devices/register", async (request, reply) => {
+  app.post<{ Body: { token?: unknown; environment?: unknown } }>("/devices/register", async (request, reply) => {
     if (typeof request.body?.token !== "string") return reply.code(400).send({ error: "token is required" });
+    if (request.body.environment !== undefined && request.body.environment !== "sandbox" && request.body.environment !== "production") {
+      return reply.code(400).send({ error: "environment must be sandbox or production" });
+    }
     try {
-      await registerDevice(options.workspaceDir, request.body.token);
+      await registerDevice(options.workspaceDir, request.body.token, request.body.environment as "sandbox" | "production" | undefined);
       return reply.code(204).send();
     } catch (error) {
       return reply.code(400).send({ error: (error as Error).message });
@@ -131,30 +189,11 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       const timezone = request.body.timezone ?? options.timezone;
       if (typeof timezone !== "string") throw new Error("timezone must be a string");
       assertTimezone(timezone);
-      const prompt = userPrompt(text.trim(), now, timezone);
-      await createRelativeReminder(options.workspaceDir, text.trim(), new Date(now));
-      const jobId = `prompt-${randomUUID()}`;
-      const job: BackgroundJob = { id: jobId, kind: "prompt", status: "pending", createdAt: now, updatedAt: now };
-      jobs.set(jobId, job);
-      await appendChat(options.workspaceDir, { id: randomUUID(), role: "user", text: text.trim(), createdAt: now });
-      const snapshot = await readSnapshot(options.workspaceDir, timezone, new Date(now));
+      const { jobId, completion } = await enqueuePrompt(text.trim(), now, timezone);
+      const snapshot = await snapshotWithActivity(timezone, new Date(now));
       // Codex turns can take tens of seconds. Accept the command first and let
       // the assistant's own mutex process queued turns in order.
-      void (async () => {
-        job.status = "running";
-        job.updatedAt = new Date().toISOString();
-        try {
-          const answer = await options.assistant.run(prompt);
-          if (answer) await appendChat(options.workspaceDir, { id: randomUUID(), role: "assistant", text: answer, createdAt: new Date().toISOString() });
-          job.status = "completed";
-        } catch (error) {
-          job.status = "failed";
-          job.error = error instanceof Error ? error.message : "Unknown error";
-          request.log.error({ err: error }, "background assistant turn failed");
-        } finally {
-          job.updatedAt = new Date().toISOString();
-        }
-      })();
+      void completion.catch(() => undefined);
       return reply
         .header("ETag", `"${snapshot.version}"`)
         .header("Retry-After", "2")
@@ -167,6 +206,32 @@ export function buildServer(options: ServerOptions): FastifyInstance {
         return reply.code(400).send({ error: message });
       }
       request.log.error({ err: error }, "assistant turn failed");
+      return reply.code(503).send({ error: "Assistant unavailable" });
+    }
+  });
+
+  app.post<{ Body: { text?: unknown; now?: unknown; timezone?: unknown } }>("/prompt/blocking", async (request, reply) => {
+    const text = request.body?.text;
+    if (typeof text !== "string" || !text.trim() || text.length > 10_000) {
+      return reply.code(400).send({ error: "text must be a non-empty string of at most 10000 characters" });
+    }
+    try {
+      const now = normalizedNow(request.body.now);
+      const timezone = request.body.timezone ?? options.timezone;
+      if (typeof timezone !== "string") throw new Error("timezone must be a string");
+      assertTimezone(timezone);
+      const { jobId, completion } = await enqueuePrompt(text.trim(), now, timezone);
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 230_000); });
+      const outcome = await Promise.race([completion.then((answer) => ({ answer })), timeout]);
+      if (timer) clearTimeout(timer);
+      const snapshot = await snapshotWithActivity(timezone);
+      return reply
+        .header("X-Job-ID", jobId)
+        .code(outcome === null ? 202 : 200)
+        .send({ completed: outcome !== null, answer: outcome?.answer ?? null, snapshot });
+    } catch (error) {
+      request.log.error({ err: error }, "blocking assistant turn failed");
       return reply.code(503).send({ error: "Assistant unavailable" });
     }
   });

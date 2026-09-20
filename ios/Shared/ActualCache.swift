@@ -6,16 +6,20 @@ struct CachedActual: Codable, Sendable {
     let updatedAt: Date
     let etag: String?
     let version: String?
+    let isProcessing: Bool
+    let activeJobCount: Int
 
-    init(markdown: String, cards: [AssistantCard] = [], updatedAt: Date, etag: String?, version: String? = nil) {
+    init(markdown: String, cards: [AssistantCard] = [], updatedAt: Date, etag: String?, version: String? = nil, isProcessing: Bool = false, activeJobCount: Int = 0) {
         self.markdown = markdown
         self.cards = cards
         self.updatedAt = updatedAt
         self.etag = etag
         self.version = version
+        self.isProcessing = isProcessing
+        self.activeJobCount = activeJobCount
     }
 
-    private enum CodingKeys: String, CodingKey { case markdown, cards, updatedAt, etag, version }
+    private enum CodingKeys: String, CodingKey { case markdown, cards, updatedAt, etag, version, isProcessing, activeJobCount }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -24,6 +28,8 @@ struct CachedActual: Codable, Sendable {
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         etag = try values.decodeIfPresent(String.self, forKey: .etag)
         version = try values.decodeIfPresent(String.self, forKey: .version)
+        isProcessing = try values.decodeIfPresent(Bool.self, forKey: .isProcessing) ?? false
+        activeJobCount = try values.decodeIfPresent(Int.self, forKey: .activeJobCount) ?? 0
     }
 }
 
@@ -49,6 +55,8 @@ struct AssistantSnapshot: Codable, Sendable {
     let timezone: String
     let actualMarkdown: String
     let cards: [AssistantCard]
+    let isProcessing: Bool?
+    let activeJobCount: Int?
 }
 
 enum ActualCache {
@@ -70,7 +78,7 @@ enum ActualCache {
     }
 
     static func save(snapshot: AssistantSnapshot, etag: String?) {
-        let value = CachedActual(markdown: snapshot.actualMarkdown, cards: snapshot.cards, updatedAt: Date(), etag: etag, version: snapshot.version)
+        let value = CachedActual(markdown: snapshot.actualMarkdown, cards: snapshot.cards, updatedAt: Date(), etag: etag, version: snapshot.version, isProcessing: snapshot.isProcessing ?? false, activeJobCount: snapshot.activeJobCount ?? 0)
         save(value)
     }
 
@@ -95,7 +103,9 @@ enum ActualCache {
             cards: cached.cards.filter { $0.id != id },
             updatedAt: cached.updatedAt,
             etag: nil,
-            version: cached.version
+            version: cached.version,
+            isProcessing: cached.isProcessing,
+            activeJobCount: cached.activeJobCount
         ))
     }
 

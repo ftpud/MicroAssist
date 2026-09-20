@@ -1,4 +1,6 @@
 import SwiftUI
+import UserNotifications
+import WidgetKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -21,6 +23,15 @@ struct ContentView: View {
     private var overview: some View {
         NavigationStack {
             List {
+                if model.isProcessing {
+                    Section {
+                        HStack {
+                            ProgressView()
+                            Text("Codex обрабатывает запрос в фоне…")
+                            Spacer()
+                        }
+                    }
+                }
                 if let error = model.errorMessage {
                     Section {
                         Text(error).foregroundStyle(.red)
@@ -159,6 +170,10 @@ private struct ChatView: View {
                     if jobs?.first?.status == "completed" || jobs?.first?.status == "failed" { break }
                 }
                 await reload()
+                if case .modified(let snapshot, let etag) = try? await api.fetchSnapshot(forceRefresh: true) {
+                    ActualCache.save(snapshot: snapshot, etag: etag)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
             } catch { self.error = error.localizedDescription }
             sending = false
         }
@@ -175,18 +190,46 @@ private struct ChatView: View {
 
 private struct TimersView: View {
     @State private var cards: [AssistantCard] = []
+    @State private var recurring: [RecurringEvent] = []
     @State private var error: String?
 
     var body: some View {
         NavigationStack {
-            List(cards) { card in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(card.title).font(.headline)
-                    Text(card.bodyMarkdown)
-                    if let raw = card.notificationAt { Label(raw, systemImage: "bell") .font(.caption).foregroundStyle(.secondary) }
+            List {
+                if let error {
+                    Section { Text(error).foregroundStyle(.red) }
+                }
+                Section("Повторяющиеся") {
+                    ForEach(recurring) { event in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(event.prompt).font(.headline)
+                            Label(event.cron, systemImage: "repeat")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text(event.timezone).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .swipeActions {
+                            Button("Удалить", systemImage: "trash", role: .destructive) {
+                                Task { await delete(event) }
+                            }
+                        }
+                    }
+                }
+                Section("Одноразовые") {
+                    ForEach(cards) { card in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(card.title).font(.headline)
+                            Text(card.bodyMarkdown)
+                            if let raw = card.notificationAt { Label(raw, systemImage: "bell") .font(.caption).foregroundStyle(.secondary) }
+                        }
+                        .swipeActions {
+                            Button("Удалить", systemImage: "trash", role: .destructive) {
+                                Task { await delete(card) }
+                            }
+                        }
+                    }
                 }
             }
-            .overlay { if cards.isEmpty { ContentUnavailableView("Нет активных таймеров", systemImage: "timer") } }
+            .overlay { if cards.isEmpty && recurring.isEmpty && error == nil { ContentUnavailableView("Нет таймеров и повторов", systemImage: "timer") } }
             .navigationTitle("Таймеры")
             .refreshable { await reload() }
             .task { await reload() }
@@ -196,8 +239,28 @@ private struct TimersView: View {
     private func reload() async {
         do {
             guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
-            cards = try await AssistantAPI(credentials: credentials).fetchReminders()
+            async let loadedCards = AssistantAPI(credentials: credentials).fetchReminders()
+            async let loadedRecurring = AssistantAPI(credentials: credentials).fetchRecurring()
+            (cards, recurring) = try await (loadedCards, loadedRecurring)
             error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func delete(_ card: AssistantCard) async {
+        do {
+            guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+            try await AssistantAPI(credentials: credentials).deleteReminder(id: card.id)
+            cards.removeAll { $0.id == card.id }
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["card-\(card.id)"])
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func delete(_ event: RecurringEvent) async {
+        do {
+            guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+            try await AssistantAPI(credentials: credentials).deleteRecurring(id: event.id)
+            recurring.removeAll { $0.id == event.id }
         } catch { self.error = error.localizedDescription }
     }
 }

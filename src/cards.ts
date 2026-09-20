@@ -186,16 +186,45 @@ export async function createRelativeReminder(workspace: string, text: string, no
 
 export async function readReminderHistory(workspace: string): Promise<Card[]> {
   const content = await optionalFile(join(workspace, "REMINDERS.md"), "# Reminders\n");
+  const cards = await readAllCards(workspace);
   return content.split("\n").flatMap((line) => {
-    const match = line.match(/^-\s+([^|\s]+)\s+\|\s+([^|]+)\s+\|\s+([^|]+)\s+\|\s+(.+)$/);
-    if (!match || Number.isNaN(Date.parse(match[3]!.trim()))) return [];
-    let body = match[4]!.trim();
+    const current = line.match(/^-\s+([^|\s]+)\s+\|\s+([^|]+)\s+\|\s+([^|]+)\s+\|\s+(.+)$/);
+    const legacy = line.match(/^-\s+(\S+)\s+[—–-]\s+(.+)$/);
+    const notificationAt = current?.[3]?.trim() ?? legacy?.[1]?.trim();
+    if (!notificationAt || Number.isNaN(Date.parse(notificationAt))) return [];
+    const matchingCard = cards.find((card) => card.kind === "reminder" && card.notificationAt === notificationAt);
+    let body = current?.[4]?.trim() ?? legacy?.[2]?.trim() ?? "";
     try { body = String(JSON.parse(body)); } catch { /* keep human-edited text */ }
-    const notificationAt = match[3]!.trim();
     return [{
-      id: match[1]!, kind: "reminder" as const, title: `Напоминание · ${match[2]!.trim()}`,
+      id: matchingCard?.id ?? current?.[1] ?? `reminder-${createHash("sha256").update(line).digest("hex").slice(0, 20)}`,
+      kind: "reminder" as const,
+      title: matchingCard?.title ?? `Напоминание · ${current?.[2]?.trim() ?? "scheduled"}`,
       bodyMarkdown: body, priority: 0, createdAt: notificationAt, notificationAt,
       dismissible: false, source: "reminder-history",
     }];
   });
+}
+
+export async function deleteReminder(workspace: string, id: string): Promise<boolean> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/.test(id)) throw new Error("Invalid reminder id");
+  const reminderPath = join(workspace, "REMINDERS.md");
+  const reminderText = await optionalFile(reminderPath, "# Reminders\n");
+  const lines = reminderText.split("\n");
+  const cards = await readAllCards(workspace);
+  const targetCard = cards.find((card) => card.id === id);
+  const keptLines = lines.filter((line) => {
+    if (line.startsWith(`- ${id} |`)) return false;
+    if (`reminder-${createHash("sha256").update(line).digest("hex").slice(0, 20)}` === id) return false;
+    if (!targetCard?.notificationAt) return true;
+    const legacy = line.match(/^-\s+(\S+)\s+[—–-]\s+/);
+    return legacy?.[1] !== targetCard.notificationAt;
+  });
+  const keptCards = cards.filter((card) => card.id !== id);
+  const existed = keptLines.length !== lines.length || keptCards.length !== cards.length;
+  if (!existed) return false;
+  await Promise.all([
+    writeFile(reminderPath, `${keptLines.join("\n").replace(/\n+$/, "")}\n`, "utf8"),
+    writeFile(join(workspace, "CARDS.md"), serializeCards(keptCards), "utf8"),
+  ]);
+  return true;
 }

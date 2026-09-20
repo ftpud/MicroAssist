@@ -8,6 +8,8 @@ export interface Config {
   workspaceDir: string;
   backupDir: string;
   logLevel: string;
+  codexModel: string;
+  codexVerbose: boolean;
   apns?: { keyId: string; teamId: string; topic: string; keyPath: string; production: boolean };
 }
 
@@ -41,6 +43,8 @@ export function loadConfig(env = process.env): Config {
     workspaceDir: resolve(env.WORKSPACE_DIR ?? "workspace"),
     backupDir: resolve(env.BACKUP_DIR ?? "backups"),
     logLevel: env.LOG_LEVEL ?? "info",
+    codexModel: env.CODEX_MODEL?.trim() || "gpt-5.6-terra",
+    codexVerbose: env.CODEX_VERBOSE !== "false",
     apns: apnsValues.every(Boolean) ? {
       keyId: env.APNS_KEY_ID!, teamId: env.APNS_TEAM_ID!, topic: env.APNS_TOPIC!,
       keyPath: resolve(env.APNS_KEY_PATH!), production: env.APNS_PRODUCTION === "true",

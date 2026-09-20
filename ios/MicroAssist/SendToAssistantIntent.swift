@@ -46,6 +46,32 @@ struct SendToAssistantIntent: AppIntent {
     }
 }
 
+struct AskAssistantAndWaitIntent: AppIntent {
+    static let title: LocalizedStringResource = "Ask Assistant and Wait"
+    static let description = IntentDescription("Waits up to four minutes for the actual Codex response.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Text") var text: String
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Ask Assistant and wait: \(\.$text)")
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .result(dialog: "There is no text to send.")
+        }
+        guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+        let result = try await AssistantAPI(credentials: credentials).sendPromptAndWait(text)
+        WidgetCenter.shared.reloadAllTimelines()
+        if result.completed {
+            let answer = result.answer?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .result(dialog: IntentDialog(stringLiteral: answer?.isEmpty == false ? answer! : "Готово."))
+        }
+        return .result(dialog: "Codex не успел за четыре минуты — запрос продолжает выполняться в фоне.")
+    }
+}
+
 struct MicroAssistShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -53,6 +79,12 @@ struct MicroAssistShortcuts: AppShortcutsProvider {
             phrases: ["Send to \(.applicationName)"],
             shortTitle: "Send to Assistant",
             systemImageName: "waveform"
+        )
+        AppShortcut(
+            intent: AskAssistantAndWaitIntent(),
+            phrases: ["Ask \(.applicationName) and wait"],
+            shortTitle: "Ask and Wait",
+            systemImageName: "hourglass"
         )
     }
 }
