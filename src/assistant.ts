@@ -8,9 +8,17 @@ import { Mutex } from "./mutex.js";
 
 export interface Assistant {
   readonly healthy: boolean;
-  run(prompt: string): Promise<string>;
+  run(prompt: string, options?: AssistantRunOptions): Promise<string>;
   close(): Promise<void>;
 }
+
+export interface AssistantRunOptions {
+  contextFiles?: string[];
+  includeJournal?: boolean;
+}
+
+const contextFileAllowlist = new Set(["AGENTS.md", "MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md", "REMINDERS.md"]);
+const defaultContextFiles = ["AGENTS.md", "MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md", "REMINDERS.md"];
 
 export class CodexAssistant implements Assistant {
   private readonly mutex = new Mutex();
@@ -19,6 +27,7 @@ export class CodexAssistant implements Assistant {
   private session?: acp.ActiveSession;
   private starting?: Promise<void>;
   private stopping = false;
+  private turnsInSession = 0;
 
   constructor(
     private readonly workspaceDir: string,
@@ -39,11 +48,12 @@ export class CodexAssistant implements Assistant {
     return this.starting;
   }
 
-  async run(prompt: string): Promise<string> {
+  async run(prompt: string, options: AssistantRunOptions = {}): Promise<string> {
     return this.mutex.runExclusive(async () => {
       await this.start();
+      const rotated = await this.rotateSessionIfNeeded();
       if (!this.session) throw new Error("ACP session is unavailable");
-      const contextualPrompt = `${prompt}\n\n${await this.workspaceContext()}`;
+      const contextualPrompt = `${prompt}\n\n${await this.workspaceContext(options, rotated)}`;
       const startedAt = Date.now();
       const turn = Math.random().toString(36).slice(2, 8);
       if (this.verbose) console.log(`[codex:${turn}] started model=${this.model} promptChars=${contextualPrompt.length}`);
@@ -97,12 +107,14 @@ export class CodexAssistant implements Assistant {
       if (response.stopReason !== "end_turn") {
         throw new Error(`Codex turn stopped: ${response.stopReason}`);
       }
+      this.turnsInSession += 1;
       return text.trim();
     });
   }
 
-  private async workspaceContext(): Promise<string> {
-    const files = ["AGENTS.md", "MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md", "REMINDERS.md", "DISMISSED.md"];
+  private async workspaceContext(options: AssistantRunOptions, includeChat: boolean): Promise<string> {
+    const requested = options.contextFiles ?? defaultContextFiles;
+    const files = [...new Set(["AGENTS.md", ...requested.filter((name) => contextFileAllowlist.has(name))])];
     const sections = await Promise.all(files.map(async (name) => {
       try {
         const content = await readFile(join(this.workspaceDir, name), "utf8");
@@ -112,18 +124,32 @@ export class CodexAssistant implements Assistant {
         throw error;
       }
     }));
-    let journal = "<missing>";
-    try { journal = (await readFile(join(this.workspaceDir, "JOURNAL.md"), "utf8")).slice(-12_000); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const supplemental: string[] = [];
+    if (options.includeJournal !== false) {
+      try { supplemental.push(`--- JOURNAL.md (tail)\n${(await readFile(join(this.workspaceDir, "JOURNAL.md"), "utf8")).slice(-4_000)}`); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    if (includeChat) {
+      try { supplemental.push(`--- CHAT.jsonl (tail; session was rotated)\n${(await readFile(join(this.workspaceDir, "CHAT.jsonl"), "utf8")).slice(-12_000)}`); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
     }
     return `WORKSPACE STATE SNAPSHOT
 The following is the fresh state captured after this turn acquired the exclusive session lock. Treat it as authoritative. Do not run pwd, rg, find, cat, sed, tail, or another read/inspection command for these files. Make all necessary state changes in one batched edit tool call. Do not reread files merely to verify the edit. Read from disk only if required information is genuinely absent from this snapshot.
 
-${sections.join("\n\n")}
-
---- JOURNAL.md (tail)
-${journal}
+${sections.concat(supplemental).join("\n\n")}
 END WORKSPACE STATE SNAPSHOT`;
+  }
+
+  private async rotateSessionIfNeeded(): Promise<boolean> {
+    if (this.turnsInSession < 24) return false;
+    if (!this.connection) throw new Error("ACP connection is unavailable");
+    this.session?.dispose();
+    this.session = await this.connection.agent.buildSession(this.workspaceDir).start();
+    this.turnsInSession = 0;
+    if (this.verbose) console.log("[codex] rotated ACP session after 24 turns");
+    return true;
   }
 
   async close(): Promise<void> {
@@ -189,6 +215,7 @@ END WORKSPACE STATE SNAPSHOT`;
       const session = await connection.agent.buildSession(this.workspaceDir).start();
       this.connection = connection;
       this.session = session;
+      this.turnsInSession = 0;
     } catch (error) {
       connection.close(error);
       if (child.exitCode === null) child.kill("SIGTERM");

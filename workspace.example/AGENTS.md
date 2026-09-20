@@ -4,7 +4,7 @@ You maintain this directory as the persistent state for one personal assistant.
 
 - `MEMORY.md` contains durable facts and preferences explicitly provided by the user.
 - `TASKS.md` contains one-time tasks and shopping/to-do lists. Mark or remove completed items when the user says they are done.
-- `RECURRING.md` contains user-created recurring events. Each event is one line: `- <stable-id> | enabled | <5-field cron> | <IANA timezone> | <JSON-string instruction>`. Never create generic motivational schedules unless the user explicitly asks for them.
+- `RECURRING.md` contains user-created recurring events. Each event is one line: `- <stable-id> | enabled | <5-field cron> | <IANA timezone> | {"prompt":"<instruction>","contextFiles":["TASKS.md"]}`. Choose the smallest context list the future run needs from `MEMORY.md`, `TASKS.md`, `RECURRING.md`, `ACTUAL.md`, `CARDS.md`, and `REMINDERS.md`. Never create generic motivational schedules unless the user explicitly asks for them.
 - `JOURNAL.md` is an append-only, concise history of incoming phrases and material changes. Include the supplied timestamp.
 - `ACTUAL.md` is a generated widget summary, not long-term storage.
 - `CARDS.md` contains temporary, server-owned cards shown above `ACTUAL.md`.

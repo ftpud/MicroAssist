@@ -88,7 +88,7 @@ enum ActualCache {
 
     static func save(_ value: CachedActual) {
         guard let data = try? JSONEncoder().encode(value) else { return }
-        if let url = cacheURL(), (try? data.write(to: url, options: .atomic)) != nil {
+        if let url = cacheURL(), (try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])) != nil {
             UserDefaults(suiteName: SharedConfig.appGroup)?.removeObject(forKey: legacyKey)
         } else {
             // Keeps previews and unsigned simulator builds functional.
@@ -113,5 +113,15 @@ enum ActualCache {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: SharedConfig.appGroup)?
             .appending(path: filename)
+    }
+}
+
+enum RefreshDiagnostics {
+    static func record(_ key: String, _ message: String) {
+        UserDefaults(suiteName: SharedConfig.appGroup)?.set("\(Date().formatted(date: .abbreviated, time: .standard)): \(message)", forKey: "refresh-\(key)")
+    }
+
+    static func value(_ key: String) -> String {
+        UserDefaults(suiteName: SharedConfig.appGroup)?.string(forKey: "refresh-\(key)") ?? "Нет событий"
     }
 }

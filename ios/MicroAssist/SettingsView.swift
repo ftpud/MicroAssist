@@ -21,6 +21,11 @@ struct SettingsView: View {
                 if let errorMessage {
                     Text(errorMessage).foregroundStyle(.red)
                 }
+                Section("Диагностика обновления") {
+                    LabeledContent("Push", value: RefreshDiagnostics.value("push"))
+                    LabeledContent("Загрузка", value: RefreshDiagnostics.value("fetch"))
+                    LabeledContent("Виджет", value: RefreshDiagnostics.value("widget"))
+                }
                 Section {
                     Text("HTTP and HTTPS are supported. HTTPS is recommended when connecting over the internet.")
                         .font(.footnote)

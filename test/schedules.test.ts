@@ -13,7 +13,7 @@ test("recurring events parse and can be deleted", async () => {
 `;
   assert.deepEqual(parseRecurring(markdown), [{
     id: "recurring-motivation", cron: "0 10 * * *", timezone: "Europe/Riga",
-    prompt: "Напиши мотивационный пост", enabled: true,
+    prompt: "Напиши мотивационный пост", enabled: true, contextFiles: [],
   }]);
   const workspace = await mkdtemp(join(tmpdir(), "micro-assist-recurring-"));
   await writeFile(join(workspace, "RECURRING.md"), markdown, "utf8");
@@ -21,4 +21,9 @@ test("recurring events parse and can be deleted", async () => {
   assert.equal(await deleteRecurring(workspace, "recurring-motivation"), true);
   assert.doesNotMatch(await readFile(join(workspace, "RECURRING.md"), "utf8"), /recurring-motivation/);
   assert.equal(await deleteRecurring(workspace, "recurring-motivation"), false);
+});
+
+test("recurring events carry a model-selected context profile", () => {
+  const markdown = `- morning | enabled | 0 10 * * * | Europe/Riga | {"prompt":"Мотивируй по задачам","contextFiles":["TASKS.md","ACTUAL.md","DEVICES.md"]}`;
+  assert.deepEqual(parseRecurring(markdown)[0]?.contextFiles, ["TASKS.md", "ACTUAL.md"]);
 });

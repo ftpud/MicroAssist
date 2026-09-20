@@ -9,6 +9,7 @@ import { createRelativeReminder, deleteReminder, dismissCard, readReminderHistor
 import { registerDevice, unregisterDevice } from "./reminders.js";
 import { appendChat, readChat, type BackgroundJob } from "./activity.js";
 import { deleteRecurring, readRecurring } from "./schedules.js";
+import type { Mutex } from "./mutex.js";
 
 export interface ServerOptions {
   token: string;
@@ -17,6 +18,7 @@ export interface ServerOptions {
   assistant: Assistant;
   notifySnapshotChanged?: () => Promise<void>;
   deliverReminders?: () => Promise<void>;
+  stateMutex?: Mutex;
   logger?: boolean | { level: string };
 }
 
@@ -37,6 +39,7 @@ function normalizedNow(value: unknown): string {
 
 export function buildServer(options: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 32 * 1024 });
+  const withState = <T>(operation: () => Promise<T>) => options.stateMutex?.runExclusive(operation) ?? operation();
   const jobs = new Map<string, BackgroundJob>();
   const snapshotWithActivity = async (timezone: string, now = new Date()) => {
     const snapshot = await readSnapshot(options.workspaceDir, timezone, now);
@@ -44,12 +47,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     return { ...snapshot, version: `${snapshot.version}.${activeJobCount}`, isProcessing: activeJobCount > 0, activeJobCount };
   };
   const enqueuePrompt = async (text: string, now: string, timezone: string) => {
-    const immediateReminder = await createRelativeReminder(options.workspaceDir, text, new Date(now));
-    if (immediateReminder && options.deliverReminders) {
-      void options.deliverReminders().catch((error: unknown) => {
-        app.log.error({ err: error, reminderId: immediateReminder.id }, "immediate reminder delivery failed");
-      });
-    }
+    const immediateReminder = await withState(() => createRelativeReminder(options.workspaceDir, text, new Date(now)));
     const jobId = `prompt-${randomUUID()}`;
     const job: BackgroundJob = { id: jobId, kind: "prompt", status: "pending", createdAt: now, updatedAt: now };
     jobs.set(jobId, job);
@@ -58,7 +56,19 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       job.status = "running";
       job.updatedAt = new Date().toISOString();
       try {
-        const answer = await options.assistant.run(userPrompt(text, now, timezone));
+        if (immediateReminder) {
+          const answer = immediateReminder.notificationAt === now
+            ? `Уведомление «${immediateReminder.bodyMarkdown}» принято к немедленной доставке.`
+            : `Напоминание «${immediateReminder.bodyMarkdown}» запланировано на ${immediateReminder.notificationAt}.`;
+          await appendChat(options.workspaceDir, { id: randomUUID(), role: "assistant", text: answer, createdAt: new Date().toISOString() });
+          await options.deliverReminders?.();
+          job.status = "completed";
+          void options.notifySnapshotChanged?.().catch((error: unknown) => {
+            app.log.error({ err: error, jobId }, "snapshot refresh push failed");
+          });
+          return answer;
+        }
+        const answer = await withState(() => options.assistant.run(userPrompt(text, now, timezone)));
         if (answer) await appendChat(options.workspaceDir, { id: randomUUID(), role: "assistant", text: answer, createdAt: new Date().toISOString() });
         job.status = "completed";
         if (options.notifySnapshotChanged) {
@@ -130,7 +140,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 
   app.delete<{ Params: { id: string } }>("/reminders/:id", async (request, reply) => {
     try {
-      return reply.code(await deleteReminder(options.workspaceDir, request.params.id) ? 204 : 404).send();
+      return reply.code(await withState(() => deleteReminder(options.workspaceDir, request.params.id)) ? 204 : 404).send();
     } catch (error) {
       return reply.code(400).send({ error: (error as Error).message });
     }
@@ -140,7 +150,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 
   app.delete<{ Params: { id: string } }>("/recurring/:id", async (request, reply) => {
     try {
-      return reply.code(await deleteRecurring(options.workspaceDir, request.params.id) ? 204 : 404).send();
+      return reply.code(await withState(() => deleteRecurring(options.workspaceDir, request.params.id)) ? 204 : 404).send();
     } catch (error) {
       return reply.code(400).send({ error: (error as Error).message });
     }
@@ -152,15 +162,17 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 
   app.post<{ Params: { id: string } }>("/cards/:id/dismiss", async (request, reply) => {
     try {
-      const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
-      const card = snapshot.cards.find((candidate) => candidate.id === request.params.id);
-      if (!card) {
-        await dismissCard(options.workspaceDir, request.params.id);
+      return await withState(async () => {
+        const snapshot = await readSnapshot(options.workspaceDir, options.timezone);
+        const card = snapshot.cards.find((candidate) => candidate.id === request.params.id);
+        if (!card) {
+          await dismissCard(options.workspaceDir, request.params.id);
+          return reply.code(204).send();
+        }
+        if (!card.dismissible) return reply.code(409).send({ error: "Card is not dismissible" });
+        await dismissCard(options.workspaceDir, card.id);
         return reply.code(204).send();
-      }
-      if (!card.dismissible) return reply.code(409).send({ error: "Card is not dismissible" });
-      await dismissCard(options.workspaceDir, card.id);
-      return reply.code(204).send();
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid card";
       return reply.code(400).send({ error: message });
@@ -246,5 +258,8 @@ export function buildServer(options: ServerOptions): FastifyInstance {
 }
 
 export async function refreshActual(assistant: Assistant, timezone: string, now = new Date()): Promise<void> {
-  await assistant.run(refreshPrompt(now.toISOString(), timezone));
+  await assistant.run(refreshPrompt(now.toISOString(), timezone), {
+    contextFiles: ["MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md"],
+    includeJournal: false,
+  });
 }

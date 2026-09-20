@@ -1,3 +1,3 @@
 # Повторяющиеся события
 
-<!-- Формат: - id | enabled | 5-field cron | IANA timezone | "инструкция" -->
+<!-- Формат: - id | enabled | 5-field cron | IANA timezone | {"prompt":"инструкция","contextFiles":["TASKS.md"]} -->

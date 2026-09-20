@@ -11,8 +11,9 @@ ${text}
 Затем обнови CARDS.md по правилам AGENTS.md. Карточки — временный слой над ACTUAL.md, а не замена сводки.
 Создай или замени короткую response-карточку с последним полезным ответом. Для явного напоминания вычисли notificationAt от указанного времени, сохрани его в REMINDERS.md строго как \`- <same-card-id> | scheduled | <absolute ISO-8601 notificationAt> | <JSON-string reminder text>\` и создай ровно одну reminder-карточку. visibleUntil напоминания должен быть позже notificationAt.
 Если пользователь просит что-либо присылать регулярно, добавь или обнови одну строку в RECURRING.md строго в формате:
-- <stable-id> | enabled | <5-field cron> | <IANA timezone> | <JSON-строка с инструкцией>
-Например: - recurring-motivation-10 | enabled | 0 10 * * * | Europe/Riga | "Напиши новый короткий мотивационный пост"
+- <stable-id> | enabled | <5-field cron> | <IANA timezone> | {"prompt":"<инструкция>","contextFiles":["<нужный файл>"]}
+Сам выбери минимальный набор contextFiles, который потребуется будущему запуску. Допустимы MEMORY.md, TASKS.md, RECURRING.md, ACTUAL.md, CARDS.md и REMINDERS.md. Например, мотивация на основе сегодняшних задач требует TASKS.md и ACTUAL.md; общий независимый текст может использовать пустой список.
+Например: - recurring-motivation-10 | enabled | 0 10 * * * | Europe/Riga | {"prompt":"Напиши новый короткий мотивационный пост на основе актуальных задач","contextFiles":["TASKS.md","ACTUAL.md"]}
 Не создавай заранее карточки для будущих повторов: сервер запустит инструкцию в назначенное время.
 Не утверждай, что push-уведомление уже отправлено или доставлено: модель только сохраняет состояние, а фактическую APNs-доставку выполняет сервер.
 Не выдумывай сведения, даты и задачи.`;

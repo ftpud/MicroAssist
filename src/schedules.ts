@@ -8,9 +8,11 @@ export interface RecurringEvent {
   timezone: string;
   prompt: string;
   enabled: boolean;
+  contextFiles: string[];
 }
 
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
+const contextFileAllowlist = new Set(["MEMORY.md", "TASKS.md", "RECURRING.md", "ACTUAL.md", "CARDS.md", "REMINDERS.md"]);
 
 async function optional(path: string, fallback: string): Promise<string> {
   try { return await readFile(path, "utf8"); } catch (error) {
@@ -27,10 +29,21 @@ export function parseRecurring(markdown: string): RecurringEvent[] {
     const expression = match[3]!.trim();
     const timezone = match[4]!.trim();
     let prompt = match[5]!.trim();
-    try { prompt = String(JSON.parse(prompt)); } catch { /* human-edited text */ }
+    let contextFiles: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(prompt);
+      if (typeof parsed === "string") prompt = parsed;
+      else if (parsed && typeof parsed === "object") {
+        const value = parsed as { prompt?: unknown; contextFiles?: unknown };
+        prompt = typeof value.prompt === "string" ? value.prompt : "";
+        contextFiles = Array.isArray(value.contextFiles)
+          ? [...new Set(value.contextFiles.filter((name): name is string => typeof name === "string" && contextFileAllowlist.has(name)))]
+          : [];
+      }
+    } catch { /* human-edited legacy text */ }
     if (!idPattern.test(id) || !cron.validate(expression) || !prompt) return [];
     try { new Intl.DateTimeFormat("en", { timeZone: timezone }).format(); } catch { return []; }
-    return [{ id, cron: expression, timezone, prompt, enabled: match[2] === "enabled" }];
+    return [{ id, cron: expression, timezone, prompt, enabled: match[2] === "enabled", contextFiles }];
   });
 }
 

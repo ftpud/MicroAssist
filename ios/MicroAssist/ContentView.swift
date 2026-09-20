@@ -206,6 +206,10 @@ private struct TimersView: View {
                             Label(event.cron, systemImage: "repeat")
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(event.timezone).font(.caption2).foregroundStyle(.secondary)
+                            if let files = event.contextFiles, !files.isEmpty {
+                                Text("Контекст: \(files.joined(separator: ", "))")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                         .swipeActions {
                             Button("Удалить", systemImage: "trash", role: .destructive) {

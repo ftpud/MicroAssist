@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ApnsClient } from "./push.js";
 import { ApnsError } from "./push.js";
 import { readSnapshot } from "./cards.js";
+import type { Mutex } from "./mutex.js";
 
 const tokenPattern = /^[a-fA-F0-9]{32,256}$/;
 export type ApnsEnvironment = "sandbox" | "production";
@@ -45,7 +46,7 @@ export class ReminderScheduler {
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private workspace: string, private timezone: string, private apns?: ApnsClient) {}
+  constructor(private workspace: string, private timezone: string, private apns?: ApnsClient, private stateMutex?: Mutex) {}
 
   start(): void {
     this.timer = setInterval(() => {
@@ -61,7 +62,12 @@ export class ReminderScheduler {
     if (this.running || !this.apns) return;
     this.running = true;
     try {
-      const [snapshot, deliveredText, tokens] = await Promise.all([
+      await (this.stateMutex?.runExclusive(() => this.deliver(now)) ?? this.deliver(now));
+    } finally { this.running = false; }
+  }
+
+  private async deliver(now: Date): Promise<void> {
+    const [snapshot, deliveredText, tokens] = await Promise.all([
         readSnapshot(this.workspace, this.timezone, now),
         optional(join(this.workspace, "DELIVERED.md"), "# Delivered notifications\n"),
         deviceRegistrations(this.workspace),
@@ -89,6 +95,5 @@ export class ReminderScheduler {
           console.error(`[apns] delivery failed for all devices card=${card.id}`);
         }
       }
-    } finally { this.running = false; }
   }
 }

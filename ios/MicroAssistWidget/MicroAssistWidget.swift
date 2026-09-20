@@ -37,16 +37,25 @@ struct ActualProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<ActualEntry>) -> Void) {
         Task {
             let old = ActualCache.load()
-            if let credentials = try? Credentials.load() {
-                if case .modified(let snapshot, let etag) = try? await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true) {
-                    ActualCache.save(snapshot: snapshot, etag: etag)
+            RefreshDiagnostics.record("widget", "Запрошен timeline")
+            // A push/foreground fetch just wrote this cache: render it immediately.
+            if old == nil || Date().timeIntervalSince(old!.updatedAt) > 10 {
+                do {
+                    guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+                    if case .modified(let snapshot, let etag) = try await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true, timeout: 8) {
+                        ActualCache.save(snapshot: snapshot, etag: etag)
+                        RefreshDiagnostics.record("widget", "Получен snapshot \(snapshot.version.prefix(12))")
+                    }
+                } catch {
+                    RefreshDiagnostics.record("widget", "Ошибка: \(error.localizedDescription)")
                 }
+            } else {
+                RefreshDiagnostics.record("widget", "Показан свежий кэш \(old?.version?.prefix(12) ?? "unknown")")
             }
             let entry = ActualEntry(date: Date(), cached: ActualCache.load() ?? old)
             // WidgetKit may defer refreshes, so APNs remains the primary trigger.
             // This shorter timeline is a safety net when a background push is throttled.
-            let interval: TimeInterval = entry.cached?.isProcessing == true ? 60 : 15 * 60
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(interval))))
+            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60))))
         }
     }
 }
@@ -61,11 +70,6 @@ struct MicroAssistWidgetView: View {
             HStack {
                 Text("Актуальное").font(isFullPage ? .title2.bold() : .headline)
                 Spacer()
-                if entry.cached?.isProcessing == true {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Codex обрабатывает запрос")
-                }
                 Image(systemName: "sparkles").foregroundStyle(.tint)
             }
             if let cards = entry.cached?.cards, !cards.isEmpty {

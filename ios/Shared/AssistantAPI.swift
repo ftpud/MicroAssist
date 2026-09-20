@@ -22,11 +22,11 @@ struct AssistantAPI: Sendable {
 
     let credentials: Credentials
 
-    func fetchSnapshot(etag: String? = nil, forceRefresh: Bool = false) async throws -> FetchResult {
+    func fetchSnapshot(etag: String? = nil, forceRefresh: Bool = false, timeout: TimeInterval = 30) async throws -> FetchResult {
         var request = URLRequest(
             url: endpoint("snapshot"),
             cachePolicy: .reloadIgnoringLocalCacheData,
-            timeoutInterval: 30
+            timeoutInterval: timeout
         )
         request.setValue("Bearer \(credentials.token)", forHTTPHeaderField: "Authorization")
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
@@ -207,6 +207,7 @@ struct RecurringEvent: Codable, Identifiable, Sendable {
     let timezone: String
     let prompt: String
     let enabled: Bool
+    let contextFiles: [String]?
 }
 
 struct BlockingPromptResponse: Codable, Sendable {

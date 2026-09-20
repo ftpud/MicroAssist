@@ -44,8 +44,12 @@ source: "test"
 **Markdown** body
 `, "utf8");
   const assistant = new FakeAssistant();
-  const app = buildServer({ token: "secret", timezone: "Europe/Riga", workspaceDir, assistant });
-  return { app, assistant, workspaceDir };
+  const delivery = { count: 0 };
+  const app = buildServer({
+    token: "secret", timezone: "Europe/Riga", workspaceDir, assistant,
+    deliverReminders: async () => { delivery.count += 1; },
+  });
+  return { app, assistant, workspaceDir, delivery };
 }
 
 test("health reports ACP state without authentication", async () => {
@@ -139,6 +143,24 @@ test("invalid timezone is rejected", async () => {
     payload: { text: "Купить хлеб", timezone: "Moon/Base" },
   });
   assert.equal(response.statusCode, 400);
+  await app.close();
+});
+
+test("simple reminders bypass Codex and trigger delivery directly", async () => {
+  const { app, assistant, delivery } = await fixture();
+  const headers = { authorization: "Bearer secret" };
+  const response = await app.inject({
+    method: "POST", url: "/prompt", headers,
+    payload: { text: "Напомни через 5 минут купить корм", now: "2026-09-20T14:35:00.000Z", timezone: "Europe/Riga" },
+  });
+  assert.equal(response.statusCode, 202);
+  for (let attempt = 0; attempt < 20 && delivery.count === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  assert.equal(delivery.count, 1);
+  assert.equal(assistant.prompts.length, 0);
+  const activity = await app.inject({ method: "GET", url: "/activity", headers });
+  assert.equal(activity.json().jobs[0].status, "completed");
   await app.close();
 });
 

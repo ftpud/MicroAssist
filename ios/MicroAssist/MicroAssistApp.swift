@@ -35,7 +35,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        _ = await refreshFromNotification()
+        return [.banner, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        _ = await refreshFromNotification()
+    }
+
+    private func refreshFromNotification() async -> UIBackgroundFetchResult {
+        RefreshDiagnostics.record("push", "Получено уведомление")
+        do {
+            guard let credentials = try Credentials.load() else { throw AssistantAPIError.notConfigured }
+            if case .modified(let snapshot, let etag) = try await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true, timeout: 15) {
+                ActualCache.save(snapshot: snapshot, etag: etag)
+                RefreshDiagnostics.record("fetch", "Сохранён \(snapshot.version.prefix(12)), карточек: \(snapshot.cards.count); reload запрошен")
+                WidgetCenter.shared.reloadAllTimelines()
+                return .newData
+            }
+            return .noData
+        } catch {
+            RefreshDiagnostics.record("fetch", "Ошибка: \(error.localizedDescription)")
+            return .failed
+        }
     }
 
     func application(
@@ -44,21 +66,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
         Task {
-            guard let credentials = try? Credentials.load() else {
-                completionHandler(.noData)
-                return
-            }
-            do {
-                if case .modified(let snapshot, let etag) = try await AssistantAPI(credentials: credentials).fetchSnapshot(forceRefresh: true) {
-                    ActualCache.save(snapshot: snapshot, etag: etag)
-                    WidgetCenter.shared.reloadAllTimelines()
-                    completionHandler(.newData)
-                } else {
-                    completionHandler(.noData)
-                }
-            } catch {
-                completionHandler(.failed)
-            }
+            completionHandler(await refreshFromNotification())
         }
     }
 }
