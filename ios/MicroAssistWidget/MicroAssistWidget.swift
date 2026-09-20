@@ -34,10 +34,10 @@ struct MicroAssistWidgetView: View {
     let entry: ActualEntry
 
     var body: some View {
-        let sections = MarkdownSummary.sections(from: entry.cached?.markdown ?? "", itemLimit: family == .systemSmall ? 4 : 8)
-        VStack(alignment: .leading, spacing: 5) {
+        let sections = MarkdownSummary.sections(from: entry.cached?.markdown ?? "", itemLimit: itemLimit)
+        VStack(alignment: .leading, spacing: sectionSpacing) {
             HStack {
-                Text("Актуальное").font(.headline)
+                Text("Актуальное").font(isFullPage ? .title2.bold() : .headline)
                 Spacer()
                 Image(systemName: "sparkles").foregroundStyle(.tint)
             }
@@ -47,9 +47,13 @@ struct MicroAssistWidgetView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(sections) { section in
-                    Text(section.title).font(.caption.bold()).foregroundStyle(.secondary)
+                    Text(section.title)
+                        .font(isFullPage ? .headline : .caption.bold())
+                        .foregroundStyle(.secondary)
                     ForEach(section.items, id: \.self) { item in
-                        Text("• \(item)").font(.caption).lineLimit(1)
+                        Text("• \(item)")
+                            .font(isFullPage ? .body : .caption)
+                            .lineLimit(isFullPage || family == .systemLarge ? 2 : 1)
                     }
                 }
             }
@@ -59,6 +63,27 @@ struct MicroAssistWidgetView: View {
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private var isFullPage: Bool {
+        if #available(iOSApplicationExtension 27.0, *) {
+            return family == .systemExtraLargePortrait
+        }
+        return false
+    }
+
+    private var itemLimit: Int {
+        if isFullPage { return 24 }
+        switch family {
+        case .systemSmall: return 4
+        case .systemMedium: return 8
+        case .systemLarge: return 14
+        default: return 8
+        }
+    }
+
+    private var sectionSpacing: CGFloat {
+        isFullPage ? 10 : 5
     }
 }
 
@@ -71,6 +96,20 @@ struct MicroAssistWidget: Widget {
         }
         .configurationDisplayName("Актуальное")
         .description("Current tasks from MicroAssist.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}
+
+@available(iOSApplicationExtension 27.0, *)
+struct MicroAssistFullPageWidget: Widget {
+    let kind = "MicroAssistFullPageWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: ActualProvider()) { entry in
+            MicroAssistWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Актуальное — весь экран")
+        .description("Full-page overview of your current tasks.")
+        .supportedFamilies([.systemExtraLargePortrait])
     }
 }

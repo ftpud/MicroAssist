@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = AssistantViewModel()
     @State private var showingSettings = false
 
@@ -43,7 +44,11 @@ struct ContentView: View {
                 }
             }
             .refreshable { await model.refresh() }
-            .task { await model.refresh() }
+            .task { await model.becameActive() }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await model.becameActive() }
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView { Task { await model.refresh() } }
             }

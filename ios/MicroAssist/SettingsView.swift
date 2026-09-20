@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Text(errorMessage).foregroundStyle(.red)
                 }
                 Section {
-                    Text("Use HTTPS when connecting over a network. HTTP is intended only for local development.")
+                    Text("HTTP and HTTPS are supported. HTTPS is recommended when connecting over the internet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

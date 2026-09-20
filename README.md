@@ -64,7 +64,9 @@ Before installing on a device:
 2. Change `com.microassist.app` and `com.microassist.app.widget` if those bundle IDs are unavailable.
 3. Change `group.com.microassist.shared` consistently in both entitlements files and `SharedConfig.swift`, then enable that App Group for both targets.
 4. Ensure both targets have Keychain Sharing enabled with `com.microassist.shared`.
-5. Build and run `MicroAssist`, open Settings, and enter the externally reachable HTTPS server URL and bearer token. `127.0.0.1` on an iPhone refers to the phone, not this server.
+5. Build and run `MicroAssist`, open Settings, and enter the externally reachable HTTP or HTTPS server URL and bearer token. `127.0.0.1` on an iPhone refers to the phone, not this server.
+
+Both the app and widget permit plain HTTP endpoints. HTTPS is still strongly recommended when the server is reachable over the internet because the bearer token and personal content otherwise travel unencrypted.
 
 To create the dictation shortcut, open Shortcuts and make a new shortcut with two actions:
 
@@ -72,6 +74,8 @@ To create the dictation shortcut, open Shortcuts and make a new shortcut with tw
 2. `Send to Assistant`, with the dictated text passed into its Text parameter
 
 The intent refreshes all widget timelines after the server responds. The widget also refreshes from `/actual.md` approximately every 90 minutes and displays its App Group cache when offline; iOS may delay background refreshes.
+
+On iOS 27, the widget gallery also offers a separate `Актуальное — весь экран` portrait widget. After upgrading from an older build, remove the installed app once before reinstalling if the widget gallery still shows cached size metadata.
 
 Command-line compile check:
 

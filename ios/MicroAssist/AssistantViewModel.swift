@@ -3,14 +3,26 @@ import WidgetKit
 
 @MainActor
 final class AssistantViewModel: ObservableObject {
-    @Published var markdown = ActualCache.load()?.markdown ?? "# Актуальное\n\nНастройте сервер, чтобы начать."
-    @Published var lastUpdated = ActualCache.load()?.updatedAt
+    @Published var markdown: String
+    @Published var lastUpdated: Date?
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    var sections: [SummarySection] { MarkdownSummary.sections(from: markdown) }
+    var sections: [SummarySection] { MarkdownSummary.sections(from: markdown, itemLimit: 10) }
+
+    init() {
+        let cached = ActualCache.load()
+        markdown = cached?.markdown ?? "# Актуальное\n\nНастройте сервер, чтобы начать."
+        lastUpdated = cached?.updatedAt
+    }
+
+    func becameActive() async {
+        loadCachedValue()
+        await refresh()
+    }
 
     func refresh() async {
+        guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
@@ -30,5 +42,11 @@ final class AssistantViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func loadCachedValue() {
+        guard let cached = ActualCache.load() else { return }
+        markdown = cached.markdown
+        lastUpdated = cached.updatedAt
     }
 }
