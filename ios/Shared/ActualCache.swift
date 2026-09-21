@@ -38,7 +38,7 @@ struct AssistantCard: Codable, Identifiable, Sendable, Equatable {
     let kind: String
     let title: String
     let bodyMarkdown: String
-    let priority: Int
+    let priority: Int?
     let createdAt: String
     let visibleFrom: String?
     let visibleUntil: String?
